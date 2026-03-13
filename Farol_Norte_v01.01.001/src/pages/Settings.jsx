@@ -7,12 +7,15 @@ import {
     limparApenasTransacoes, 
     limparSistemaCompleto 
 } from '../services/DataService';
+import { THEMES, applyTheme, BACKGROUNDS, applyBackground, getSavedBackground } from '../utils/themeManager';
+
 
 export default function Settings() {
     // Estados
     const [fileToImport, setFileToImport] = useState(null);
     const [showClearModal, setShowClearModal] = useState(false);
     const [clearOption, setClearOption] = useState('transactions');
+    const [currentBg, setCurrentBg] = useState(() => getSavedBackground());
 
     // Manipuladores de Ação
     const handleExport = () => exportarDados();
@@ -48,6 +51,76 @@ export default function Settings() {
                     <div className="d-flex align-items-center gap-2 mb-4">
                         <i className="bi bi-gear-fill fs-4 text-warning"></i>
                         <h2 className="mb-0 fw-bold text-light">Configurações</h2>
+                    </div>
+
+                    {/* NOVO CARD: APARÊNCIA E TEMAS */}
+                    <div className="theme-surface shadow-sm mb-4 radius-12">
+                        <div className="card-header bg-transparent border-bottom border-secondary border-opacity-25 py-3 px-4">
+                            <h6 className="mb-0 fw-bold text-light">
+                                <i className="bi bi-palette-fill text-warning me-2"></i>Aparência e Personalização
+                            </h6>
+                        </div>
+                        <div className="card-body p-4">
+                            <p className="text-muted small mb-4">Escolha a atmosfera visual do seu Farol Norte. A mudança é aplicada instantaneamente.</p>
+                            <div className="row g-3">
+                                {Object.values(THEMES).map(theme => {
+                                    const currentTheme = localStorage.getItem('app_theme') || 'farol';
+                                    const isActive = currentTheme === theme.id;
+                                    return (
+                                        <div className="col-6 col-md-3" key={theme.id}>
+                                            <div 
+                                                className={`p-3 radius-12 cursor-pointer text-center transition-all h-100 d-flex flex-column justify-content-center shadow-sm ${isActive ? 'border border-2 border-warning' : 'border border-secondary border-opacity-25 opacity-75 hover-opacity'}`}
+                                                style={{ backgroundColor: theme.colors['--app-bg'], color: theme.colors['--text-main'] }}
+                                                onClick={() => {
+                                                    applyTheme(theme.id);
+                                                    // Força uma atualização leve na tela para re-renderizar as bordas ativas
+                                                    setClearOption(prev => prev); 
+                                                }}
+                                            >
+                                                <div className="fs-2 mb-2">{theme.icon}</div>
+                                                <div className="fw-bold text-micro text-uppercase">{theme.name}</div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* NOVO CARD: ATMOSFERA (BACKGROUNDS ANIMADOS) */}
+                    <div className="theme-surface shadow-sm mb-5 radius-12">
+                        <div className="card-header bg-transparent border-bottom border-secondary border-opacity-25 py-3 px-4">
+                            <h6 className="mb-0 fw-bold text-light">
+                                <i className="bi bi-images text-warning me-2"></i>Atmosfera (Animação de Fundo)
+                            </h6>
+                        </div>
+                        <div className="card-body p-4">
+                            <p className="text-muted small mb-4">Escolha a animação de fundo para criar o seu ambiente perfeito de foco financeiro.</p>
+                            <div className="row g-3">
+                                {Object.values(BACKGROUNDS).map(bg => {
+                                    const isActive = currentBg === bg.id;
+                                    return (
+                                        <div className="col-12 col-md-6" key={bg.id}>
+                                            <div 
+                                                className={`p-3 radius-12 cursor-pointer transition-all h-100 d-flex align-items-center shadow-sm ${isActive ? 'border border-2 border-warning bg-white bg-opacity-10' : 'border border-secondary border-opacity-25 bg-transparent opacity-75 hover-opacity'}`}
+                                                onClick={() => {
+                                                    applyBackground(bg.id);
+                                                    setCurrentBg(bg.id); // Atualiza a borda laranja do botão instantaneamente
+                                                }}
+                                            >
+                                                <div className="fs-1 me-3" style={{ filter: isActive ? 'drop-shadow(0 0 10px rgba(255,255,255,0.3))' : 'none' }}>
+                                                    {bg.icon}
+                                                </div>
+                                                <div>
+                                                    <div className={`fw-bold ${isActive ? 'text-warning' : 'text-light'}`}>{bg.name}</div>
+                                                    <div className="text-micro text-muted mt-1 lh-sm">{bg.desc}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
                     </div>
 
                     {/* CARD 1: BACKUP E RESTAURAÇÃO */}
