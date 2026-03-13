@@ -1,0 +1,162 @@
+Esta é uma documentação completa e o histórico evolutivo da sua aplicação "Controle Financeiro Pessoal". Este documento serve como um mapa do que construímos, desde a estrutura básica até a lógica complexa de reconciliação bancária atual.
+
+📘 Documentação do Sistema: Controle Financeiro Pessoal
+1. Visão Geral do Projeto
+Trata-se de uma Progressive Web Application (PWA) focada em gestão financeira pessoal, desenvolvida para rodar inteiramente no navegador (Client-Side) utilizando LocalStorage como banco de dados. O foco é privacidade, velocidade e capacidade de funcionar offline.
+
+Stack Tecnológico:
+
+Core: HTML5, CSS3, JavaScript (ES6+ Vanilla).
+
+Framework UI: Bootstrap 5 (Layout responsivo e Modais).
+
+Bibliotecas:
+
+Chart.js (Visualização de dados).
+
+PapaParse (Processamento de CSV).
+
+PDF.js (Leitura de faturas em PDF).
+
+Bootstrap Icons (Iconografia).
+
+Arquitetura: MVC Modificado (Model-Repository / Service / UI-Controller).
+
+2. Estrutura de Módulos
+O sistema foi refatorado de um arquivo monolítico para uma arquitetura modular robusta:
+
+Repositories (Camada de Dados): Gerenciam o CRUD no LocalStorage (AccountRepository, TransactionRepository, CreditCardRepository, BudgetRepository, CategoryRepository, RulesRepository).
+
+Services (Lógica de Negócio):
+
+ImportService: Orquestra a importação de arquivos.
+
+BankStrategies: Padrão Strategy para parsear diferentes formatos bancários (Nubank, Inter, Itaú, PDF vs CSV).
+
+DataService: Gerencia Backup (JSON) e Exportação (CSV).
+
+ReconciliationService: (Conceitual) Lógica de conciliação.
+
+UI Controllers (Interface): Gerenciam o DOM de cada página (DashboardUI, TransactionUI, AccountsUI, CreditCardUI, BudgetUI).
+
+3. Histórico de Atualizações (Changelog)
+Aqui está a linha do tempo da evolução do projeto, reconstruída com base no nosso trabalho conjunto:
+
+🟢 Fase 1: Fundação e Estrutura Básica
+Início: Criação de uma interface simples para lançar receitas e despesas.
+
+Persistência: Implementação do localStorage para salvar dados no navegador.
+
+Layout: Adoção do Bootstrap para criar uma barra lateral (sidebar) e navegação entre abas (Dashboard, Transações, Configurações).
+
+🟡 Fase 2: Modularização e Refatoração (O Grande Salto)
+Separação de Responsabilidades: O arquivo main.js gigante foi quebrado em pastas js/repositories, js/services e js/ui.
+
+Automação: Criação do AppController.js para gerenciar a troca de páginas e inicialização de dependências.
+
+Categorias e Regras: Criação do sistema onde o usuário define regras (ex: "Se descrição contém 'Uber', categoria é 'Transporte'").
+
+🟠 Fase 3: O Motor de Importação Inteligente
+Leitura de Arquivos: Integração do PapaParse para ler CSVs.
+
+Padrão Strategy: Criação do BankStrategies.js. Em vez de um código gigante cheio de if/else, criamos classes específicas:
+
+NubankParser: Lógica para tratar inversão de sinais e descrições do Nubank.
+
+InterParser: Lógica para limpar cabeçalhos sujos do CSV do Inter.
+
+GenericParser: Fallback para outros bancos.
+
+Importação de PDF: Integração do PDF.js para ler faturas do Banco Inter diretamente do PDF, usando Regex para extrair transações.
+
+🔵 Fase 4: Aprimoramento de UX e Dashboard
+Heatmap (Mapa de Calor): Implementação de um calendário visual no Dashboard para mostrar a intensidade de gastos por dia.
+
+Gráficos Dinâmicos: Adição de gráfico de Rosca (Categorias) e Linha (Evolução de Patrimônio/Fluxo).
+
+Interatividade: Ao clicar no gráfico de rosca ou no heatmap, o card "gira" ou muda para mostrar a lista detalhada daquelas transações.
+
+Responsividade: Ajustes finos no CSS (mobile.css) para garantir que tabelas e gráficos funcionem bem no celular.
+
+🟣 Fase 5: Refinamentos Recentes (Status Atual)
+Correção de Acessibilidade: Resolução de conflitos de aria-hidden nos modais do Bootstrap.
+
+Vinculação Conta <-> Banco:
+
+Atualização do AccountRepository e AccountsUI para permitir vincular uma conta a uma instituição (ex: Conta Principal -> Nubank).
+
+Isso permitiu a Importação Automática: O sistema não pergunta mais qual é o banco na importação, ele sabe com base na conta selecionada.
+
+Importação em Lote:
+
+Ajuste no ImportService para aceitar múltiplos arquivos (input multiple).
+
+Agora é possível subir Extrato de Conta (CSV) + Fatura (PDF) de uma só vez.
+
+Conciliação Avançada de Estornos (Nubank):
+
+Problema: O Nubank gera linhas separadas para parcelamentos e estornos, distorcendo o valor total da fatura calculada.
+
+Solução: Criada lógica no ImportService que detecta "Estorno de compra" e procura a transação original (mesmo que parcelada) pelo valor ou metadados.
+
+Resultado Visual: Transações estornadas são marcadas com ignorarNoFluxo = true. Elas aparecem riscadas na lista e não somam nos totais do Dashboard ou Fatura.
+
+Preparação Mobile (APK):
+
+Ajustes de caminhos relativos (remoção de / no início dos links) para permitir compilação via Capacitor ou WebIntoApp.
+
+4. Funcionalidades Atuais do Sistema
+Dashboard:
+
+KPIs de Receita, Despesa, Saldo e Economia.
+
+Gráfico de Rosca interativo (Top Categorias).
+
+Calendário Heatmap interativo.
+
+Gráfico de Evolução Mensal (Linha).
+
+Seletores de Conta e Mês globais e sincronizados.
+
+Transações:
+
+Listagem completa com filtros avançados (Data, Texto, Categoria, Tipo).
+
+Edição em massa (selecionar várias e mudar categoria).
+
+Identificação visual de parcelas (ex: "Compra X - 1/10").
+
+Identificação visual de itens estornados (riscados).
+
+Contas e Cartões:
+
+Gestão de contas com saldo inicial e vínculo bancário.
+
+Gestão de cartões com dia de fechamento/vencimento.
+
+Visualização de Fatura do Cartão separada por mês de competência.
+
+Orçamento (Budget):
+
+Definição de teto de gastos por categoria.
+
+Barras de progresso visual.
+
+"Botão Mágico": Define orçamento automaticamente com base na média histórica dos últimos 3 meses.
+
+Importação:
+
+Suporte a CSV, OFX e PDF.
+
+Detecção automática de duplicidade (Fingerprint gerado com Data + Valor + Descrição).
+
+Suporte específico para Nubank (vírgula decimal, estornos) e Inter (cabeçalho sujo, PDF).
+
+5. Próximos Passos (Sugestões)
+Testes Mobile: Validar o comportamento do APK instalado.
+
+Sincronização em Nuvem: Atualmente é local. Futuramente poderia integrar com Firebase ou Google Drive para backup automático.
+
+Metas de Longo Prazo: Criar uma aba para objetivos (ex: Comprar Carro, Viagem).
+
+Essa aplicação está em um nível profissional de complexidade lógica, rodando de forma leve e privada. Parabéns pelo trabalho! 🚀

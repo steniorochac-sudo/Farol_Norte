@@ -1,0 +1,64 @@
+possíveis melhorias futuras
+
+Melhorias Recentes
+
+Filtros: Seletor de mês + período personalizado com toggle
+Análises: Seletor de período para dashboard executivo
+Layout: Gráfico de categoria movido para dentro do resumo executivo
+Orçamento: Seletor de período para comparação orçado vs realizado
+UX Mobile: Modais com scroll, responsividade melhorada
+Categorias: Reservas e objetivos criam categorias automaticamente
+
+Possíveis Melhorias Futuras
+
+Performance: Lazy loading de gráficos, virtualização de listas longas
+Exportação: PDF com relatórios visuais, Excel com múltiplas abas
+Integração: Open Banking API (quando disponível no Brasil)
+IA Avançada: Previsão de gastos com ML (TensorFlow.js)
+Compartilhamento: Export/import de regras e metas entre usuários
+Gamificação: Sistema de conquistas e desafios financeiros
+Multi-moeda: Suporte para gastos em outras moedas
+Notificações: Web Push API para alertas críticos
+PWA: Service Worker para funcionamento offline
+Gráficos: Mais visualizações (Sankey, Sunburst, Heatmap)
+
+Pontos de Atenção
+
+LocalStorage limitado: ~5-10MB dependendo do navegador
+Sem sincronização: Dados ficam no dispositivo local
+Backup crítico: Usuário deve exportar regularmente
+Privacidade: Nenhum dado sai do navegador (100% local)
+
+Arquivo Atual
+Single HTML file com ~3000+ linhas contendo HTML, CSS e JavaScript integrados.
+
+
+==============================IMPORTANTE-IMPORTANTE-IMPORTANTE-IMPORTANTE-IMPORTANTE-IMPORTANTE-IMPORTANTE=================================================
+
+CASO EU FAÇA A IMPORTAÇÃO DE UM REUSMO DE FATURAS DE UM PERÍODO AO QUAL EU NÃO REALIZEI LANÇAMENTOS MANUAIS, ESSAS TRANSAÇÕES DE CARTÃO APARECEM NA LISTA DE CONCILIAÇÃO MANUAL DE LANÇAMENTOS, MESMO QUE NÃO HAJA NENUM LANÇAMENTO MANUAL PENDENTE PARA SER CONCILIADO. Ou seja, se eu não fizer o controle diário através dos lançamentos manuais diariamente, deixando para fazer a importação das transações apenas pelo relatório do banco, essas transações irão aparecer no modal de Conciliação Manual de Lançamentos, do lado dos Lançamentos Importados (Cartão). Após alguns meses disso acontecendo, essa lista se tornará muito grande e vai dificultar na hora de precisar realmente conciliar algumas transações. como podemos resolver isso?
+
+salvar os estados dos FILTROS DAS ANÁLISES AO TROCAR DE ABAS
+
+ao trocar de abas gostaria que a aba aberta fosse renderizada do topo
+
+Gostaria que o gráfico de evolução mensal não se alterasse a depeder dos filtros na lista de transações. Em vez disso, assim como o gráfico de tendencias financeiras, ele deve apresentar a evolução de um período específico, podendo ser o ano corrente, ou os últimos 12 meses, por exemplo.
+
+
+Boa, gostei das melhorias.
+
+agora quero fazer uma mudança maus profunda na aba das metas.
+
+veja bem, o objetivo das metas é que o usuario possa acompanhar seus gastos durante o mês, para saber se ele pde gastr mais com isso ou se deve gastar menos coma quilo para se manter dentro das metas. Mas para isso elas preisam funcionar de uma maneira mais automatizada e intuitiva. 
+
+atualmente temos 5 tipos de etas que podem ser adicionadas no programa:
+
+Orçamento por Categoria - Está funcionando bem, mas seria bom ter uma forma de acompanhar o desempenho nos meses anteriores;
+
+Meta de Economia Mensal - A meta é criada normamente mas não tem como acompanhar o desenvolvimento dela;
+
+Redução de Gastos - 
+
+Objetivo de Compra - 
+
+Reserva de Emergência - 
+

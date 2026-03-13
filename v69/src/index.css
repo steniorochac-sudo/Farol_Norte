@@ -1,0 +1,596 @@
+/* ==========================================
+   1. DICIONÁRIOS DE TEMAS
+   ========================================== */
+:root,
+[data-theme="farol-norte"] {
+  --app-bg: linear-gradient(180deg, #0B1E2D 0%, #10283C 50%, #162F47 100%);
+  --surface-bg: rgba(18, 38, 58, 0.5);
+  --surface-border: rgba(232, 237, 242, 0.05);
+  --surface-blur: 6px;
+
+  --text-main: #E8EDF2;
+  --text-muted: #9BA8B4;
+
+  --porto-base: #1FA67A;
+  --farol-glow: #F2B705;
+
+
+  color-scheme: dark;
+}
+
+/* ==========================================
+     TIPOGRAFIA E RESET GLOBAL
+     ========================================== */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  font-family: 'Inter', sans-serif;
+  color: var(--text-main) !important;
+  /* ESTA É A LINHA MÁGICA QUE MATA O BRANCO DO BOOTSTRAP */
+  background: var(--app-bg) !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.navbar-brand {
+  font-family: 'Manrope', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+/* ==========================================
+   MOTOR DE ANIMAÇÕES DOS BACKGROUNDS (VIBEZ)
+   ========================================== */
+
+/* ==========================================
+   MOTOR DE ANIMAÇÕES DOS BACKGROUNDS (CENAS SVG)
+   ========================================== */
+.farol-background-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -2;
+    background: var(--app-bg);
+    overflow: hidden;
+}
+
+.farol-svg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Rotação da luz do farol para a Direita */
+.light-beam-rotate {
+    transform-origin: 850px 262px;
+    animation: rotateBeam 12s infinite alternate ease-in-out;
+}
+@keyframes rotateBeam {
+    0% { transform: rotate(-5deg); opacity: 0.6; }
+    100% { transform: rotate(15deg); opacity: 1; }
+}
+
+/* Rotação da luz do farol para a Esquerda */
+.light-beam-rotate-reverse {
+    transform-origin: 150px 222px;
+    animation: rotateBeamRev 14s infinite alternate ease-in-out;
+}
+@keyframes rotateBeamRev {
+    0% { transform: rotate(5deg); opacity: 0.6; }
+    100% { transform: rotate(-15deg); opacity: 1; }
+}
+
+/* Movimento de Névoa/Nuvens */
+.cloud-drift {
+    animation: driftClouds 20s infinite alternate ease-in-out;
+}
+@keyframes driftClouds {
+    0% { transform: translateX(-30px); }
+    100% { transform: translateX(30px); }
+}
+
+/* 1. Farol Clássico (Pulsação lenta) */
+.light-beam-pulse {
+  animation: pulseLight 8s infinite alternate ease-in-out;
+}
+@keyframes pulseLight {
+  0% { opacity: 0.3; transform: translateX(-50%) scale(0.9); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1.1); }
+}
+
+/* 2. Chuva Lo-Fi (Translação de Listras) */
+.rain-layer {
+  background-image: linear-gradient(170deg, rgba(255,255,255,0) 0%, var(--surface-border) 50%, rgba(255,255,255,0) 100%);
+  background-size: 8px 120px;
+  animation: rainDrop 0.8s linear infinite;
+  opacity: 0.6;
+}
+@keyframes rainDrop {
+  from { background-position: 0 0; }
+  to { background-position: 0 120px; }
+}
+
+/* 3. Aurora Cósmica (Blur Massivo + Flutuação) */
+.aurora-blob {
+  position: absolute;
+  filter: blur(80px); /* O segredo do efeito Aurora */
+  opacity: 0.35;
+  border-radius: 50%;
+  animation: floatBlob infinite alternate ease-in-out;
+}
+@keyframes floatBlob {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(10vw, 15vh) scale(1.3); }
+}
+
+/* 4. Raio de Sol (Oscilação suave como vento na janela) */
+.sun-ray {
+  animation: raySway 10s infinite alternate ease-in-out;
+  opacity: 0.8;
+}
+@keyframes raySway {
+  0% { transform: rotate(30deg) translateX(0); opacity: 0.5; }
+  100% { transform: rotate(35deg) translateX(5vw); opacity: 0.9; }
+}
+
+/* Animação do Feixe de Luz do Farol SVG */
+.light-beam {
+  transform-origin: 850px 262px;
+  animation: sweepLight 12s infinite ease-in-out alternate;
+}
+@keyframes sweepLight {
+  0% { transform: rotate(-15deg); opacity: 0.8; }
+  100% { transform: rotate(5deg); opacity: 0.2; }
+}
+
+
+/* ==========================================
+     CLASSES SEMÂNTICAS (GLASSMORPHISM)
+     ========================================== */
+.theme-surface {
+  background-color: var(--surface-bg) !important;
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  border: 1px solid var(--surface-border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1) !important;
+  color: var(--text-main) !important;
+
+  /* Mantemos as transições suaves, mas sem forçar o 3D */
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.glass-nav {
+  background-color: var(--surface-bg) !important;
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  border-top: 1px solid var(--surface-border) !important;
+
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Modificadores Globais */
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+.text-success {
+  color: var(--porto-base) !important;
+}
+
+.text-warning {
+  color: var(--farol-glow) !important;
+}
+
+.text-danger {
+  color: #dc3545 !important;
+}
+
+.text-dark {
+  color: var(--text-main) !important;
+}
+
+/* ==========================================
+     INPUTS, MENUS E BARRAS (TRANSPARENTES)
+     ========================================== */
+.form-control,
+.form-select,
+.input-group-text,
+.form-control-color {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-main) !important;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 0 0 0.15rem rgba(242, 183, 5, 0.25) !important;
+  /* Brilho Farol */
+  border-color: var(--farol-glow) !important;
+  color: var(--text-main) !important;
+}
+
+.form-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%239BA8B4' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+}
+
+option {
+  /* Usamos o "Azul Abissal" (a cor mais escura do mar do nosso SVG) */
+  background-color: #040A10 !important;
+  color: var(--text-main) !important;
+  font-weight: 500;
+
+  /* Estes estilos aplicam um espaçamento extra em navegadores de PC (Firefox/Chrome) */
+  padding: 12px !important;
+  font-size: 0.95rem;
+}
+
+.dropdown-menu {
+  background-color: rgba(16, 40, 60, 0.95) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--surface-border) !important;
+}
+
+.dropdown-item {
+  color: var(--text-main) !important;
+}
+
+.dropdown-item:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: var(--farol-glow) !important;
+}
+
+/* Corrige ícones de input tipo "date" e "checkbox" no modo escuro */
+::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+/* ==========================================
+     ANIMAÇÕES E BARRAS DE ROLAGEM
+     ========================================== */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.hover-opacity {
+  transition: opacity 0.2s ease-in-out;
+}
+
+.hover-opacity:hover {
+  opacity: 0.8;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==========================================
+     NAVEGAÇÃO PREMIUM (DESKTOP E MOBILE)
+     ========================================== */
+
+/* Link Desktop Ativo com Borda Brilhante */
+.nav-link-desktop {
+  position: relative;
+  padding: 0.5rem 0;
+}
+
+.nav-link-desktop.active::after {
+  content: '';
+  position: absolute;
+  bottom: -22px;
+  /* Encosta perfeitamente no fundo do header */
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background-color: var(--farol-glow);
+  box-shadow: 0 -2px 10px var(--farol-glow);
+  border-radius: 3px 3px 0 0;
+}
+
+/* Brilho no ícone mobile ativo */
+.mobile-nav-active {
+  color: var(--farol-glow) !important;
+  text-shadow: 0 0 15px rgba(242, 183, 5, 0.6);
+}
+
+/* ==========================================
+   CUSTOM SELECT (REACT DESIGN SYSTEM)
+   ========================================== */
+.custom-select-wrapper {
+  position: relative;
+  width: 100%;
+  min-width: 140px;
+  user-select: none;
+}
+
+/* O BOTÃO DO SELETOR (Adaptável ao Tema) */
+.custom-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 1rem;
+  cursor: pointer;
+  background-color: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  color: var(--text-main);
+  transition: all 0.2s ease-in-out;
+  font-weight: 600;
+}
+
+.custom-select-trigger:hover {
+  border-color: var(--farol-glow);
+}
+
+.custom-select-trigger.active {
+  border-color: var(--farol-glow);
+  background-color: var(--surface-bg);
+}
+
+/* O MENU SUSPENSO (Lista) - Unificado e Inteligente */
+.custom-select-menu {
+  background-color: var(--app-bg) !important;
+  border: 1px solid var(--surface-border) !important;
+  backdrop-filter: blur(16px);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  min-width: max-content;
+  z-index: 1050;
+  max-height: 250px;
+  overflow-y: auto;
+  border-radius: 12px;
+  padding: 0.5rem 0;
+  transform-origin: top;
+  animation: dropDown 0.2s ease-out forwards;
+}
+
+/* COMPORTAMENTO DINÂMICO (PARA CIMA) */
+.custom-select-menu.drop-up {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: bottom;
+  animation: dropUpAnim 0.2s ease-out forwards;
+}
+
+@keyframes dropDown {
+  from {
+    opacity: 0;
+    transform: scaleY(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes dropUpAnim {
+  from {
+    opacity: 0;
+    transform: scaleY(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+/* OS ITENS DA LISTA */
+.custom-select-item {
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-main) !important;
+}
+
+.custom-select-item:hover,
+.custom-select-item.selected {
+  background-color: var(--surface-border) !important;
+  color: var(--farol-glow) !important;
+  font-weight: bold;
+}
+
+/* ==========================================
+     CLASSES UTILITÁRIAS (LAYOUT E TAMANHOS)
+     ========================================== */
+
+/* Z-Index Fixos */
+.z-100 {
+  z-index: 100;
+}
+
+.z-150 {
+  z-index: 150;
+}
+
+/* Alturas e Larguras */
+.h-300 {
+  height: 300px;
+}
+
+.h-320 {
+  height: 320px;
+}
+
+.w-180 {
+  width: 180px;
+}
+
+.min-w-180 {
+  min-width: 180px;
+}
+
+.max-w-65 {
+  max-width: 65%;
+}
+
+.max-w-160 {
+  max-width: 160px;
+}
+
+/* Margens Negativas para Encaixes (Inputs) */
+.mx-n1 {
+  margin-left: -1px;
+  margin-right: -1px;
+}
+
+/* Bordas Específicas */
+.radius-12 {
+  border-radius: 12px !important;
+}
+
+.radius-left-8 {
+  border-radius: 8px 0 0 8px !important;
+}
+
+.radius-right-8 {
+  border-radius: 0 8px 8px 0 !important;
+}
+
+.radius-bottom-16 {
+  border-radius: 0 0 16px 16px !important;
+}
+
+/* Painéis e Sobreposições (Overlays) */
+.drilldown-overlay {
+  background-color: var(--surface-bg);
+  z-index: 10;
+}
+
+.scrollable-menu {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Estrutura do Heatmap */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.heatmap-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+}
+
+.heatmap-cell-empty {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Tipografia Extra Pequena */
+.text-xxs {
+  font-size: 0.75rem;
+}
+
+.text-micro {
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: -0.5px;
+}
+
+.line-height-1 {
+  line-height: 1;
+}
+
+/* ==========================================
+     ESTILIZAÇÃO DE PLACEHOLDER (INPUTS)
+     ========================================== */
+
+/* Placeholder mais visível no tema escuro */
+.form-control::placeholder {
+  color: var(--text-muted);
+  /* Usa a cor cinza/clara já definida no seu tema */
+  opacity: 0.7;
+  /* Um pouco mais suave que o texto normal */
+}
+
+/* Quando o input está focado, o placeholder pode sumir ou ficar ainda mais claro */
+.form-control:focus::placeholder {
+  color: transparent;
+  /* Opção comum: esconde placeholder ao focar */
+  /* ou mantenha visível: color: var(--text-muted); opacity: 0.4; */
+}
+
+/* Para compatibilidade total (inclui Firefox, Safari antigo, etc.) */
+.form-control::-webkit-input-placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.form-control::-moz-placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.form-control:-ms-input-placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.form-control::-ms-input-placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* ==========================================
+   ADAPTAÇÃO AUTOMÁTICA DE TEMAS (Substitui Bootstrap)
+   ========================================== */
+.text-light,
+.text-white {
+  color: var(--text-main) !important;
+}
+
+.text-muted,
+.text-white-50 {
+  color: var(--text-muted) !important;
+}
+
+.btn-close-white {
+  filter: var(--btn-close-filter, none) !important;
+}
