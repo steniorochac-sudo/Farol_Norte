@@ -1,15 +1,38 @@
-// src/components/CustomSelect.jsx
+// src/components/CustomSelect.tsx
 import React, { useState, useRef, useEffect } from 'react';
 
-export default function CustomSelect({ value, onChange, options, className = "", textColor = "text-light" }) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [isDropUp, setIsDropUp] = useState(false); // NOVO: Controla a direção
-    const dropdownRef = useRef(null);
+// 1. Tipagem exata das opções que o Select recebe
+export interface SelectOption {
+    value: string;
+    label: string;
+    disabled?: boolean;
+}
+
+// 2. Tipagem das Props do Componente
+interface CustomSelectProps {
+    value: string;
+    onChange: (value: string) => void;
+    options: SelectOption[];
+    className?: string;
+    textColor?: string;
+}
+
+export default function CustomSelect({ 
+    value, 
+    onChange, 
+    options, 
+    className = "", 
+    textColor = "text-light" 
+}: CustomSelectProps): JSX.Element {
+    const [isOpen, setIsOpen] = useState<boolean>(false);
+    const [isDropUp, setIsDropUp] = useState<boolean>(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     // Fecha o menu se clicar fora
     useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        const handleClickOutside = (event: MouseEvent) => {
+            // event.target precisa do cast para Node no TypeScript
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsOpen(false);
             }
         };
@@ -23,9 +46,8 @@ export default function CustomSelect({ value, onChange, options, className = "",
             const rect = dropdownRef.current.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             const spaceAbove = rect.top;
-            const menuEstimatedHeight = 250; // Altura máxima do nosso menu no CSS
+            const menuEstimatedHeight = 250;
 
-            // Se o espaço abaixo for menor que o menu E houver mais espaço em cima, abre para cima!
             if (spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow) {
                 setIsDropUp(true);
             } else {
@@ -37,7 +59,7 @@ export default function CustomSelect({ value, onChange, options, className = "",
 
     const selectedOption = options.find(opt => opt.value === value) || options[0];
 
-    const handleSelect = (val) => {
+    const handleSelect = (val: string) => {
         onChange(val);
         setIsOpen(false);
     };
@@ -49,12 +71,10 @@ export default function CustomSelect({ value, onChange, options, className = "",
                 onClick={toggleOpen}
             >
                 <span className="text-truncate me-2">{selectedOption?.label}</span>
-                {/* O ícone inverte dependendo da direção que abriu */}
                 <i className={`bi bi-chevron-${isOpen ? (isDropUp ? 'down' : 'up') : 'down'} text-muted`} style={{ fontSize: '0.8rem' }}></i>
             </div>
 
             {isOpen && (
-                // Adicionamos a classe "drop-up" dinamicamente
                 <div className={`custom-select-menu theme-surface shadow-lg border-secondary border-opacity-50 ${isDropUp ? 'drop-up' : ''}`}>
                     {options.map((opt, index) => {
                         if (opt.disabled && opt.label === '---') {

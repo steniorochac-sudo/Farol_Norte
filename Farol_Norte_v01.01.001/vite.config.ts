@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'LumeKoin',
-        short_name: 'LumeKoin',
+        name: 'Farol Norte',
+        short_name: 'Farol Norte',
         description: 'Gestão Financeira Inteligente',
         theme_color: '#0d6efd',
         background_color: '#f8f9fa',
@@ -32,11 +32,10 @@ export default defineConfig({
   ],
   // ===  BLOCO BUILD ===
   build: {
-    chunkSizeWarningLimit: 2500, // Aumenta o limite do aviso
+    chunkSizeWarningLimit: 2500,
     rollupOptions: {
       output: {
         manualChunks: {
-          // Quebra as bibliotecas mais pesadas em arquivos separados
           vendor: ['react', 'react-dom', 'react-router-dom'],
           charts: ['chart.js'],
           pdf: ['pdfjs-dist']

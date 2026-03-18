@@ -1,38 +1,67 @@
-// src/pages/Transactions.jsx
+// src/pages/Transactions.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { formatCurrency } from '../utils/formatters';
 import { parseDateBR, generateUUID } from '../utils/helpers';
 import { db } from '../services/DataService';
-import ImportModal from '../components/ImportModal.jsx';
-import CustomSelect from '../components/CustomSelect.jsx';
+import ImportModal from '../components/ImportModal'; // Assumindo que ainda está em .jsx ou já migrado
+import CustomSelect, { SelectOption } from '../components/CustomSelect';
+import type { Transaction, Account, Category } from '../types/index';
+
+// =========================================================
+// INTERFACES LOCAIS (Para os Modais)
+// =========================================================
+interface TransactionEditModalProps {
+    transaction: Transaction | null;
+    onClose: () => void;
+    accounts: Account[];
+    categories: Category[];
+    refreshData: () => void;
+}
+
+interface MassSplitModalProps {
+    selectedIds: Set<string>;
+    categories: Category[];
+    onClose: () => void;
+    refreshData: () => void;
+}
+
+interface SplitItem {
+    categoria: string;
+    valor: string | number;
+}
+
+interface MassSplitItem {
+    categoria: string;
+    pct: string | number;
+}
 
 export default function Transactions() {
     const { 
         transactions = [], 
         accounts = [], 
         categories = [], 
-        currentAccountId, 
-        changeAccount, 
-        refreshData 
-    } = useFinance() || {};
+        currentAccountId = 'all', 
+        changeAccount = () => {}, 
+        refreshData = () => {} 
+    } = useFinance();
 
     // ==========================================
     // 1. ESTADOS DE INTERFACE E FILTROS
     // ==========================================
-    const [showImportModal, setShowImportModal] = useState(false);
+    const [showImportModal, setShowImportModal] = useState<boolean>(false);
 
-    const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('transactions_search_pref') || '');
-    const [selectedMonth, setSelectedMonth] = useState(() => localStorage.getItem('transactions_period_pref') || new Date().toISOString().slice(0, 7));
-    const [selectedCategory, setSelectedCategory] = useState(() => localStorage.getItem('transactions_category_pref') || 'all');
-    const [selectedType, setSelectedType] = useState(() => localStorage.getItem('transactions_type_pref') || 'all');
+    const [searchTerm, setSearchTerm] = useState<string>(() => localStorage.getItem('transactions_search_pref') || '');
+    const [selectedMonth, setSelectedMonth] = useState<string>(() => localStorage.getItem('transactions_period_pref') || new Date().toISOString().slice(0, 7));
+    const [selectedCategory, setSelectedCategory] = useState<string>(() => localStorage.getItem('transactions_category_pref') || 'all');
+    const [selectedType, setSelectedType] = useState<string>(() => localStorage.getItem('transactions_type_pref') || 'all');
 
-    const [currentPage, setCurrentPage] = useState(1);
+    const [currentPage, setCurrentPage] = useState<number>(1);
     const itemsPerPage = 50;
-    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-    const [modalEdit, setModalEdit] = useState({ show: false, transaction: null });
-    const [modalMassSplit, setModalMassSplit] = useState({ show: false });
+    const [modalEdit, setModalEdit] = useState<{ show: boolean; transaction: Transaction | null }>({ show: false, transaction: null });
+    const [modalMassSplit, setModalMassSplit] = useState<{ show: boolean }>({ show: false });
 
     useEffect(() => {
         localStorage.setItem('transactions_search_pref', searchTerm);
@@ -47,7 +76,7 @@ export default function Transactions() {
     // 2. MOTOR DE FILTRAGEM (USEMEMO)
     // ==========================================
     const availableMonths = useMemo(() => {
-        const months = new Set();
+        const months = new Set<string>();
         transactions.forEach(t => {
             if (t.data) {
                 const parts = t.data.split('/');
@@ -62,7 +91,8 @@ export default function Transactions() {
     const filteredTransactions = useMemo(() => {
         return transactions.filter(t => {
             if (currentAccountId !== 'all' && t.account_id !== currentAccountId) return false;
-            if (selectedType !== 'all' && t.tipoLancamento !== selectedType) return false;
+            // Usamos casting dinâmico caso tipoLancamento venha do JS legado
+            if (selectedType !== 'all' && (t as any).tipoLancamento !== selectedType) return false;
 
             if (selectedMonth !== 'all') {
                 const parts = t.data?.split('/');
@@ -101,11 +131,11 @@ export default function Transactions() {
             if (!dateA && !dateB) return 0;
             if (!dateA) return 1;
             if (!dateB) return -1;
-            return dateB - dateA;
+            return dateB.getTime() - dateA.getTime();
         });
     }, [transactions, currentAccountId, selectedMonth, selectedCategory, selectedType, searchTerm]);
 
-    const navegarMes = (dir) => {
+    const navegarMes = (dir: number) => {
         if (selectedMonth === 'all') return;
         const idx = availableMonths.indexOf(selectedMonth) + dir;
         if (idx >= 0 && idx < availableMonths.length) {
@@ -135,14 +165,14 @@ export default function Transactions() {
     // ==========================================
     // 3. AÇÕES EM MASSA
     // ==========================================
-    const toggleSelection = (id) => {
+    const toggleSelection = (id: string) => {
         const newSet = new Set(selectedIds);
         if (newSet.has(id)) newSet.delete(id);
         else newSet.add(id);
         setSelectedIds(newSet);
     };
 
-    const toggleAllPage = (e) => {
+    const toggleAllPage = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newSet = new Set(selectedIds);
         paginatedTransactions.forEach(t => {
             if (e.target.checked) newSet.add(t.identificador);
@@ -159,7 +189,7 @@ export default function Transactions() {
         setSelectedIds(new Set());
     };
 
-    const handleMassCategorize = (novaCategoria) => {
+    const handleMassCategorize = (novaCategoria: string) => {
         if (!novaCategoria) return;
         if (!window.confirm(`Classificar ${selectedIds.size} itens como "${novaCategoria}"?`)) return;
 
@@ -178,36 +208,36 @@ export default function Transactions() {
     // ==========================================
     // PREPARAÇÃO DE OPÇÕES PARA OS CUSTOM SELECTS
     // ==========================================
-    const accountOptions = [
+    const accountOptions: SelectOption[] = [
         { value: 'all', label: '🏦 Todas as Contas' },
         ...accounts.map(acc => ({ value: acc.id, label: acc.nome }))
     ];
 
-    const monthOptions = [
+    const monthOptions: SelectOption[] = [
         { value: 'all', label: '📅 Histórico Todo' },
         { value: 'disabled', label: '---', disabled: true },
         ...availableMonths.map(mesAno => {
             const [ano, mes] = mesAno.split('-');
-            const dateObj = new Date(ano, mes - 1, 1);
+            const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
             const nomeMes = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
             return { value: mesAno, label: nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1) };
         })
     ];
 
-    const categoryOptions = [
+    const categoryOptions: SelectOption[] = [
         { value: 'all', label: '🏷️ Todas Categorias' },
         { value: 'NULL_CAT', label: '⚠️ Sem Classificação' },
         { value: 'disabled', label: '---', disabled: true },
         ...categories.map(cat => ({ value: cat.nome, label: cat.nome }))
     ];
 
-    const typeOptions = [
+    const typeOptions: SelectOption[] = [
         { value: 'all', label: '💳 Todos os Tipos' },
         { value: 'conta', label: 'Débito / Pix' },
         { value: 'cartao', label: 'Cartão de Crédito' }
     ];
 
-    const massCategoryOptions = [
+    const massCategoryOptions: SelectOption[] = [
         { value: '', label: 'Classificar como...' },
         { value: 'disabled', label: '---', disabled: true },
         ...categories.map(cat => ({ value: cat.nome, label: cat.nome }))
@@ -320,7 +350,7 @@ export default function Transactions() {
                                     </div>
                                     
                                     <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '40px', height: '40px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                                        <i className={`bi fs-5 ${t.tipoLancamento === 'cartao' ? 'bi-credit-card text-warning' : 'bi-bank text-success'}`}></i>
+                                        <i className={`bi fs-5 ${(t as any).tipoLancamento === 'cartao' ? 'bi-credit-card text-warning' : 'bi-bank text-success'}`}></i>
                                     </div>
 
                                     <div className="flex-grow-1 cursor-pointer" style={{ minWidth: 0 }} onClick={() => setModalEdit({ show: true, transaction: t })}>
@@ -371,7 +401,6 @@ export default function Transactions() {
                     </div>
                     <div className="d-flex align-items-center gap-2">
                         
-                        {/* Seletor Customizado na Barra Flutuante */}
                         <div style={{ width: '200px' }}>
                             <CustomSelect options={massCategoryOptions} value="" onChange={(val) => handleMassCategorize(val)} textColor="text-light" />
                         </div>
@@ -387,7 +416,9 @@ export default function Transactions() {
                 </div>
             )}
             
+            {/* O Modal de Importação ainda precisa ser migrado para TSX, se acusar erro, ignore por enquanto */}
             <ImportModal show={showImportModal} onClose={() => setShowImportModal(false)} />
+            
             {modalEdit.show && <TransactionEditModal transaction={modalEdit.transaction} onClose={() => setModalEdit({ show: false, transaction: null })} accounts={accounts} categories={categories} refreshData={refreshData} />}
             {modalMassSplit.show && <MassSplitModal selectedIds={selectedIds} categories={categories} onClose={() => { setModalMassSplit({ show: false }); setSelectedIds(new Set()); }} refreshData={refreshData} />}
         </div>
@@ -397,24 +428,26 @@ export default function Transactions() {
 // =========================================================
 // SUB-COMPONENTE: MODAL DE EDIÇÃO E CRIAÇÃO (COM RATEIO)
 // =========================================================
-function TransactionEditModal({ transaction, onClose, accounts, categories, refreshData }) {
+function TransactionEditModal({ transaction, onClose, accounts, categories, refreshData }: TransactionEditModalProps) {
     const isNew = !transaction;
 
-    const [desc, setDesc] = useState(isNew ? '' : (transaction.nome || ''));
-    const [valorVisual, setValorVisual] = useState(isNew ? '' : Math.abs(transaction.valor || 0).toString());
-    const [dataIso, setDataIso] = useState(() => {
-        if (isNew || !transaction.data) return new Date().toISOString().split('T')[0];
+    const [desc, setDesc] = useState<string>(isNew ? '' : (transaction?.nome || ''));
+    const [valorVisual, setValorVisual] = useState<string>(isNew ? '' : Math.abs(transaction?.valor || 0).toString());
+    const [dataIso, setDataIso] = useState<string>(() => {
+        if (isNew || !transaction?.data) return new Date().toISOString().split('T')[0];
         const [d, m, y] = transaction.data.split('/');
         return `${y}-${m}-${d}`;
     });
-    const [accountId, setAccountId] = useState(isNew ? (accounts[0]?.id || '') : (transaction.account_id || ''));
-    const [isReceita, setIsReceita] = useState(isNew ? false : (transaction.valor >= 0));
+    const [accountId, setAccountId] = useState<string>(isNew ? (accounts[0]?.id || '') : (transaction?.account_id || ''));
+    const [isReceita, setIsReceita] = useState<boolean>(isNew ? false : ((transaction?.valor || 0) >= 0));
 
-    const [isSplit, setIsSplit] = useState(!isNew && transaction.split && transaction.split.length > 0);
-    const [singleCategory, setSingleCategory] = useState(isNew ? 'Não classificada' : (transaction.categoria || 'Não classificada'));
-    const [splits, setSplits] = useState(!isNew && transaction.split ? transaction.split.map(s => ({ ...s, valor: Math.abs(s.valor || 0) })) : []);
+    const [isSplit, setIsSplit] = useState<boolean>(!isNew && !!transaction?.split && transaction.split.length > 0);
+    const [singleCategory, setSingleCategory] = useState<string>(isNew ? 'Não classificada' : (transaction?.categoria || 'Não classificada'));
+    
+    // Tipagem da fatia de rateio
+    const [splits, setSplits] = useState<SplitItem[]>(!isNew && transaction?.split ? transaction.split.map(s => ({ ...s, valor: Math.abs(s.valor || 0) })) : []);
 
-    const handleSave = (e) => {
+    const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         const multiplier = isReceita ? 1 : -1;
         const valorFinalVisual = parseFloat(valorVisual);
@@ -424,22 +457,23 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
         const [y, m, d] = dataIso.split('-');
         const dataBR = `${d}/${m}/${y}`;
 
-        let finalTransaction = {
-            identificador: isNew ? `manual-${generateUUID()}` : transaction.identificador,
+        // Casting temporário devido a atributos flexíveis não declarados estritamente
+        let finalTransaction: any = {
+            identificador: isNew ? `manual-${generateUUID()}` : transaction?.identificador,
             data: dataBR,
             nome: desc,
             valor: valorFinalVisual * multiplier,
             account_id: accountId,
-            tipoLancamento: isNew ? 'conta' : transaction.tipoLancamento,
-            status: isNew ? 'caixa' : transaction.status,
-            tipo: isNew ? (isReceita ? 'Receita Manual' : 'Despesa Manual') : transaction.tipo
+            tipoLancamento: isNew ? 'conta' : (transaction as any)?.tipoLancamento,
+            status: isNew ? 'caixa' : (transaction as any)?.status,
+            tipo: isNew ? (isReceita ? 'Receita Manual' : 'Despesa Manual') : transaction?.tipo
         };
 
         if (isSplit) {
             let somaFatias = 0;
             const splitFinal = splits.map(s => {
-                somaFatias += parseFloat(s.valor || 0);
-                return { categoria: s.categoria || 'Não classificada', valor: parseFloat(s.valor || 0) * multiplier };
+                somaFatias += parseFloat(s.valor as string || '0');
+                return { categoria: s.categoria || 'Não classificada', valor: parseFloat(s.valor as string || '0') * multiplier };
             });
 
             if (Math.abs(somaFatias - valorFinalVisual) > 0.02) {
@@ -454,9 +488,9 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 
         const allT = db.getAll();
         if (isNew) {
-            allT.push(finalTransaction);
+            allT.push(finalTransaction as Transaction);
         } else {
-            const idx = allT.findIndex(t => t.identificador === transaction.identificador);
+            const idx = allT.findIndex(t => t.identificador === transaction?.identificador);
             if (idx > -1) allT[idx] = { ...allT[idx], ...finalTransaction };
         }
 
@@ -465,18 +499,18 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
         onClose();
     };
 
-    // OPÇÕES DO MODAL PARA O CUSTOM SELECT
-    const accountOptions = accounts.map(a => ({ value: a.id, label: a.nome }));
-    const categoryOptions = [
+    const accountOptions: SelectOption[] = accounts.map(a => ({ value: a.id, label: a.nome }));
+    const categoryOptions: SelectOption[] = [
         { value: 'Não classificada', label: 'Sem Categoria' },
         { value: 'disabled', label: '---', disabled: true },
         ...categories.map(c => ({ value: c.nome, label: c.nome }))
     ];
 
-    const isAccountDisabled = !isNew && transaction.tipoLancamento === 'cartao';
+    const isAccountDisabled = !isNew && (transaction as any)?.tipoLancamento === 'cartao';
 
     return (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1060 }}>
+            {/* O HTML/JSX do modal permanece exatamente o mesmo, mantendo sua UI intacta */}
             <div className="modal-dialog modal-lg">
                 <div className="modal-content theme-surface shadow-lg">
                     <form onSubmit={handleSave}>
@@ -512,15 +546,8 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
                                 </div>
                                 <div className="col-md-6">
                                     <label className="form-label fw-bold text-muted small text-uppercase">Conta Vinculada</label>
-                                    
-                                    {/* SELECT CUSTOMIZADO DE CONTAS (Com truque de bloqueio visual) */}
                                     <div style={{ pointerEvents: isAccountDisabled ? 'none' : 'auto', opacity: isAccountDisabled ? 0.5 : 1, position: 'relative', zIndex: 105 }}>
-                                        <CustomSelect 
-                                            options={accountOptions} 
-                                            value={accountId || accounts[0]?.id} 
-                                            onChange={val => setAccountId(val)} 
-                                            textColor="text-light" 
-                                        />
+                                        <CustomSelect options={accountOptions} value={accountId || accounts[0]?.id} onChange={val => setAccountId(val)} textColor="text-light" />
                                     </div>
                                     {isAccountDisabled && <small className="text-warning d-block mt-1" style={{fontSize: '0.75rem'}}><i className="bi bi-info-circle me-1"></i>A conta de cartão não pode ser alterada aqui.</small>}
                                 </div>
@@ -536,32 +563,17 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
                             {!isSplit ? (
                                 <div className="mb-3 bg-white theme-surface bg-opacity-5 p-4 rounded-4 border border-secondary border-opacity-25">
                                     <label className="form-label fw-bold text-muted small text-uppercase">Classificação</label>
-                                    
-                                    {/* SELECT CUSTOMIZADO CATEGORIA ÚNICA */}
                                     <div style={{ position: 'relative', zIndex: 104 }}>
-                                        <CustomSelect 
-                                            options={categoryOptions} 
-                                            value={singleCategory || 'Não classificada'} 
-                                            onChange={val => setSingleCategory(val)} 
-                                            textColor="text-light" 
-                                        />
+                                        <CustomSelect options={categoryOptions} value={singleCategory || 'Não classificada'} onChange={val => setSingleCategory(val)} textColor="text-light" />
                                     </div>
                                 </div>
                             ) : (
                                 <div className="bg-white bg-opacity-5 theme-surface p-4 rounded-4 border border-warning border-opacity-50">
                                     {splits.map((s, index) => (
-                                        // ESCADINHA DE Z-INDEX PARA RATEIOS (100, 99, 98...)
                                         <div key={index} className="d-flex gap-2 mb-3 position-relative" style={{ zIndex: 100 - index }}>
-                                            
                                             <div style={{ flex: 1, minWidth: '140px' }}>
-                                                <CustomSelect 
-                                                    options={categoryOptions} 
-                                                    value={s.categoria || 'Não classificada'} 
-                                                    onChange={val => { const newS = [...splits]; newS[index].categoria = val; setSplits(newS); }} 
-                                                    textColor="text-light" 
-                                                />
+                                                <CustomSelect options={categoryOptions} value={s.categoria || 'Não classificada'} onChange={val => { const newS = [...splits]; newS[index].categoria = val; setSplits(newS); }} textColor="text-light" />
                                             </div>
-
                                             <input type="number" step="0.01" className="form-control form-control-sm text-light" placeholder="R$" value={s.valor || ''} onChange={e => { const newS = [...splits]; newS[index].valor = e.target.value; setSplits(newS); }} style={{ width: '100px' }} />
                                             <button type="button" className="btn btn-sm btn-outline-danger border-opacity-50" onClick={() => setSplits(splits.filter((_, i) => i !== index))}><i className="bi bi-trash"></i></button>
                                         </div>
@@ -571,8 +583,8 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
                                     </button>
                                     <div className="mt-4 text-end small">
                                         <span className="text-muted fw-bold me-2">Soma do Rateio:</span> 
-                                        <span className={`fs-6 fw-bold ${Math.abs(splits.reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0) - (parseFloat(valorVisual) || 0)) <= 0.02 ? 'text-success' : 'text-danger'}`}>
-                                            {formatCurrency(splits.reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0))} / {formatCurrency(valorVisual)}
+                                        <span className={`fs-6 fw-bold ${Math.abs(splits.reduce((acc, curr) => acc + (parseFloat(curr.valor as string) || 0), 0) - (parseFloat(valorVisual) || 0)) <= 0.02 ? 'text-success' : 'text-danger'}`}>
+                                            {formatCurrency(splits.reduce((acc, curr) => acc + (parseFloat(curr.valor as string) || 0), 0))} / {formatCurrency(parseFloat(valorVisual))}
                                         </span>
                                     </div>
                                 </div>
@@ -593,9 +605,9 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 // =========================================================
 // SUB-COMPONENTE: MODAL DE RATEIO EM MASSA
 // =========================================================
-function MassSplitModal({ selectedIds, categories, onClose, refreshData }) {
-    const [splits, setSplits] = useState([{ categoria: '', pct: 50 }, { categoria: '', pct: 50 }]);
-    const totalPct = splits.reduce((acc, s) => acc + (parseFloat(s.pct) || 0), 0);
+function MassSplitModal({ selectedIds, categories, onClose, refreshData }: MassSplitModalProps) {
+    const [splits, setSplits] = useState<MassSplitItem[]>([{ categoria: '', pct: 50 }, { categoria: '', pct: 50 }]);
+    const totalPct = splits.reduce((acc, s) => acc + (parseFloat(s.pct as string) || 0), 0);
 
     const handleApply = () => {
         if (totalPct !== 100) return alert(`O total deve ser exatamente 100%. Atual: ${totalPct}%`);
@@ -611,7 +623,8 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }) {
 
                 for (let i = 0; i < splits.length - 1; i++) {
                     const regra = splits[i];
-                    const valorFatia = parseFloat((valorTotal * (regra.pct / 100)).toFixed(2));
+                    const pctVal = typeof regra.pct === 'string' ? parseFloat(regra.pct) : regra.pct;
+                    const valorFatia = parseFloat((valorTotal * (pctVal / 100)).toFixed(2));
                     novosSplits.push({ categoria: regra.categoria, valor: valorFatia });
                     somaParcial += valorFatia;
                 }
@@ -632,7 +645,7 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }) {
         onClose();
     };
 
-    const categoryOptions = [
+    const categoryOptions: SelectOption[] = [
         { value: '', label: 'Selecione...' },
         { value: 'disabled', label: '---', disabled: true },
         ...categories.map(c => ({ value: c.nome, label: c.nome }))
@@ -650,18 +663,10 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }) {
                         <p className="small text-muted mb-4">Defina as porcentagens matemáticas. A divisão será calculada e aplicada a todas as transações selecionadas.</p>
 
                         {splits.map((s, index) => (
-                            // ESCADINHA DE Z-INDEX
                             <div key={index} className="d-flex gap-2 mb-3 position-relative" style={{ zIndex: 100 - index }}>
-                                
                                 <div style={{ flex: 1, minWidth: '140px' }}>
-                                    <CustomSelect 
-                                        options={categoryOptions} 
-                                        value={s.categoria} 
-                                        onChange={val => { const n = [...splits]; n[index].categoria = val; setSplits(n); }} 
-                                        textColor="text-light" 
-                                    />
+                                    <CustomSelect options={categoryOptions} value={s.categoria} onChange={val => { const n = [...splits]; n[index].categoria = val; setSplits(n); }} textColor="text-light" />
                                 </div>
-
                                 <div className="input-group input-group-sm" style={{ width: '120px' }}>
                                     <input type="number" className="form-control text-light fw-bold" value={s.pct} onChange={e => { const n = [...splits]; n[index].pct = e.target.value; setSplits(n); }} />
                                     <span className="input-group-text bg-transparent border-secondary text-muted">%</span>

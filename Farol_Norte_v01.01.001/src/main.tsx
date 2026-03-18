@@ -1,17 +1,19 @@
-// src/main.jsx
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
+import App from './App.tsx'
 
-// Importando o nosso Provedor de Dados
-import { FinanceProvider } from './context/FinanceContext.jsx'
-import { ThemeProvider } from './context/ThemeContext.jsx'
+// Importando os Provedores TypeScript
+import { FinanceProvider } from './context/FinanceContext'
+import { ThemeProvider } from './context/ThemeContext'
 
 import 'bootstrap/dist/css/bootstrap.min.css' 
 import 'bootstrap-icons/font/bootstrap-icons.css'
 import './index.css'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+const rootElement = document.getElementById('root')
+if (!rootElement) throw new Error('Root element not found')
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     {/* Envolvendo o App com a nuvem de dados */}
     <ThemeProvider>
