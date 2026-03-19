@@ -16,7 +16,7 @@ export interface Transaction {
   ignorarNoFluxo?: boolean;
 }
 
-export type BankType = 'nubank' | 'inter' | 'bradesco' | 'generic' | 'wallet' | 'poupanca';
+export type BankType = 'generic' | 'nubank' | 'inter' | 'bradesco' | 'mercado_pago' | string;
 
 export interface Account {
   id: string;

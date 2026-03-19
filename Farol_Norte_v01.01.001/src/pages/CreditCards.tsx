@@ -1,14 +1,34 @@
-// src/pages/CreditCards.jsx
+// src/pages/CreditCards.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { cardsDb, db } from '../services/DataService';
 import { formatCurrency } from '../utils/formatters';
-import CustomSelect from '../components/CustomSelect.jsx';
+import CustomSelect, { SelectOption } from '../components/CustomSelect';
+import type { CreditCard, Transaction } from '../types/index';
+
+// =========================================================
+// INTERFACES LOCAIS (Para o Motor de Faturas)
+// =========================================================
+interface Fatura {
+    gastos: any[];
+    pagamentosVinculados: any[];
+    totalGastos: number;
+    totalPago: number;
+    status: 'ABERTO' | 'PAGO' | 'SUPER' | 'PARCIAL';
+    saldoRestante: number;
+}
+
+interface PagamentoProcessado {
+    original: any;
+    valorTotal: number;
+    valorUsado: number;
+    disponivel: number;
+}
 
 // =========================================================
 // FUNÇÕES PURAS (Regras de Negócio)
 // =========================================================
-function calcularMesReferencia(dataStr, diaFechamento) {
+function calcularMesReferencia(dataStr: string, diaFechamento: number): string {
     if (!dataStr) return "";
     const parts = dataStr.split("/");
     const dia = parseInt(parts[0]);
@@ -25,36 +45,36 @@ function calcularMesReferencia(dataStr, diaFechamento) {
     return `${ano}-${String(mes).padStart(2, "0")}`;
 }
 
-function formatMonthLabel(mesIso) {
+function formatMonthLabel(mesIso: string): string {
     const [ano, mes] = mesIso.split("-");
     const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
     const nomeMes = dateObj.toLocaleString("pt-BR", { month: "long" });
     return nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1) + " " + ano;
 }
 
-function criarFaturaVazia() {
-    return { gastos: [], pagamentosVinculados: [], totalGastos: 0, totalPago: 0, status: "ABERTO" };
+function criarFaturaVazia(): Fatura {
+    return { gastos: [], pagamentosVinculados: [], totalGastos: 0, totalPago: 0, status: "ABERTO", saldoRestante: 0 };
 }
 
 // =========================================================
 // COMPONENTE PRINCIPAL
 // =========================================================
 export default function CreditCards() {
-    const { transactions, currentAccountId, refreshData } = useFinance();
+    const { transactions = [], currentAccountId = 'all', refreshData = () => {} } = useFinance();
     
     // 1. ESTADOS PRINCIPAIS
-    const [selectedCardId, setSelectedCardId] = useState(null);
-    const [selectedInvoiceMonth, setSelectedInvoiceMonth] = useState(() => localStorage.getItem("creditcard_last_month") || null);
+    const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+    const [selectedInvoiceMonth, setSelectedInvoiceMonth] = useState<string | null>(() => localStorage.getItem("creditcard_last_month") || null);
     
     // 2. ESTADOS DO NOVO MODAL WIZARD (Passo a Passo)
-    const [showModal, setShowModal] = useState(false);
-    const [linkStep, setLinkStep] = useState(1);
-    const [targetInvoiceMonth, setTargetInvoiceMonth] = useState(null);
-    const [selectedPaymentIds, setSelectedPaymentIds] = useState(new Set()); // Guarda múltiplos IDs
+    const [showModal, setShowModal] = useState<boolean>(false);
+    const [linkStep, setLinkStep] = useState<number>(1);
+    const [targetInvoiceMonth, setTargetInvoiceMonth] = useState<string | null>(null);
+    const [selectedPaymentIds, setSelectedPaymentIds] = useState<Set<string>>(new Set());
 
     // 3. DADOS BÁSICOS (Cartões)
     const cartoes = cardsDb.getAll();
-    const cartoesDaConta = currentAccountId === "all" ? cartoes : cartoes.filter((c) => c.account_id === currentAccountId);
+    const cartoesDaConta = currentAccountId === "all" ? cartoes : cartoes.filter((c: any) => c.account_id === currentAccountId);
 
     // EFEITO: Seleção Automática Inicial
     useEffect(() => {
@@ -65,16 +85,16 @@ export default function CreditCards() {
 
     // 4. MEMORIZAÇÃO: Processamento Pesado da Fatura
     const { faturas, pagamentosProcessados, closingDay } = useMemo(() => {
-        if (!selectedCardId) return { faturas: {}, pagamentosProcessados: [], closingDay: 1 };
+        if (!selectedCardId) return { faturas: {} as Record<string, Fatura>, pagamentosProcessados: [], closingDay: 1 };
         
         const cardObj = cartoesDaConta.find((c) => c.id === selectedCardId);
-        const cDay = cardObj ? parseInt(cardObj.closingDay) : 1;
-        const allTrans = transactions.filter((t) => t.card_id === selectedCardId);
+        const cDay = cardObj ? parseInt((cardObj as any).closingDay) : 1;
+        const allTrans = transactions.filter((t: any) => t.card_id === selectedCardId);
 
-        const fatObj = {};
-        const pgtosProc = [];
+        const fatObj: Record<string, Fatura> = {};
+        const pgtosProc: PagamentoProcessado[] = [];
 
-        allTrans.forEach((t) => {
+        allTrans.forEach((t: any) => {
             if (t.tipo !== "Pagamento de Fatura") {
                 const mesRef = calcularMesReferencia(t.data, cDay);
                 if (!fatObj[mesRef]) fatObj[mesRef] = criarFaturaVazia();
@@ -85,13 +105,13 @@ export default function CreditCards() {
             }
         });
 
-        allTrans.forEach((t) => {
+        allTrans.forEach((t: any) => {
             if (t.tipo === "Pagamento de Fatura") {
                 const valorTotal = t.valor;
                 let valorUsado = 0;
 
                 if (t.faturaLinks && Array.isArray(t.faturaLinks)) {
-                    t.faturaLinks.forEach((link) => {
+                    t.faturaLinks.forEach((link: any) => {
                         if (!fatObj[link.mes]) fatObj[link.mes] = criarFaturaVazia();
                         fatObj[link.mes].pagamentosVinculados.push({ ...t, valorVinculado: link.valor });
                         fatObj[link.mes].totalPago += link.valor;
@@ -134,12 +154,13 @@ export default function CreditCards() {
         }
     }, [mesesDisponiveis, faturas, selectedInvoiceMonth]);
 
-    const changeMonth = (val) => {
+    const changeMonth = (val: string) => {
         setSelectedInvoiceMonth(val);
         localStorage.setItem('creditcard_last_month', val);
     };
 
-    const navegarFatura = (dir) => {
+    const navegarFatura = (dir: number) => {
+        if (!selectedInvoiceMonth) return;
         const idx = mesesDisponiveis.indexOf(selectedInvoiceMonth) + dir;
         if (idx >= 0 && idx < mesesDisponiveis.length) {
             changeMonth(mesesDisponiveis[idx]);
@@ -147,7 +168,7 @@ export default function CreditCards() {
     };
 
     // 6. AÇÕES DE VÍNCULO (MÚLTIPLOS RECIBOS)
-    const iniciarVinculo = (mes) => {
+    const iniciarVinculo = (mes: string) => {
         setTargetInvoiceMonth(mes);
         setLinkStep(2);
     };
@@ -158,22 +179,19 @@ export default function CreditCards() {
         const faturaAlvo = faturas[targetInvoiceMonth];
         if (!faturaAlvo) return;
 
-        // 1. Somar tudo que o usuário selecionou
         let totalSelecionado = 0;
         selectedPaymentIds.forEach(id => {
             const p = pagamentosProcessados.find(x => x.original.identificador === id);
             if (p) totalSelecionado += p.disponivel;
         });
 
-        // 2. Regra de Segurança: Avisa se vai gerar crédito extra
         if (faturaAlvo.status === "PAGO" || faturaAlvo.status === "SUPER" || (faturaAlvo.saldoRestante > 0 && totalSelecionado > faturaAlvo.saldoRestante)) {
             if (!window.confirm(`ATENÇÃO: O valor dos recibos (${formatCurrency(totalSelecionado)}) ultrapassa a dívida desta fatura.\n\nO excedente será adicionado automaticamente como CRÉDITO EXTRA. Deseja confirmar?`)) return;
         }
 
         const allT = db.getAll();
-        let saldoVirtual = faturaAlvo.saldoRestante; // Vamos abatendo o saldo a cada recibo processado
+        let saldoVirtual = faturaAlvo.saldoRestante; 
 
-        // 3. Processar cada recibo selecionado
         selectedPaymentIds.forEach(id => {
             const pgto = pagamentosProcessados.find(p => p.original.identificador === id);
             if (!pgto) return;
@@ -182,16 +200,16 @@ export default function CreditCards() {
             let valorParaVincular = 0;
 
             if (saldoVirtual <= 0) {
-                valorParaVincular = creditoDisponivel; // A fatura já está paga, então todo esse recibo vira crédito
+                valorParaVincular = creditoDisponivel; 
             } else {
-                valorParaVincular = Math.min(saldoVirtual, creditoDisponivel); // Pega apenas o que precisa, ou o máximo que o recibo tem
+                valorParaVincular = Math.min(saldoVirtual, creditoDisponivel); 
             }
 
-            saldoVirtual -= valorParaVincular; // Atualiza a dívida virtual para o próximo recibo
+            saldoVirtual -= valorParaVincular; 
 
-            const tIndex = allT.findIndex(t => t.identificador === pgto.original.identificador);
+            const tIndex = allT.findIndex((t: any) => t.identificador === pgto.original.identificador);
             if (tIndex > -1) {
-                const trans = allT[tIndex];
+                const trans: any = allT[tIndex];
                 if (!trans.faturaLinks) trans.faturaLinks = [];
                 trans.faturaLinks.push({ mes: targetInvoiceMonth, valor: valorParaVincular });
                 if (trans.faturaReferencia) delete trans.faturaReferencia; 
@@ -201,17 +219,16 @@ export default function CreditCards() {
         db.save(allT);
         refreshData(); 
         
-        // Finaliza limpando a cesta
         setLinkStep(1);
         setSelectedPaymentIds(new Set());
         setTargetInvoiceMonth(null);
     };
 
-    const handleDesfazerVinculo = (idTransacao, mesAlvo) => {
+    const handleDesfazerVinculo = (idTransacao: string, mesAlvo: string) => {
         const allT = db.getAll();
-        const tIndex = allT.findIndex(t => t.identificador === idTransacao);
-        if (tIndex > -1 && allT[tIndex].faturaLinks) {
-            allT[tIndex].faturaLinks = allT[tIndex].faturaLinks.filter(l => l.mes !== mesAlvo);
+        const tIndex = allT.findIndex((t: any) => t.identificador === idTransacao);
+        if (tIndex > -1 && (allT[tIndex] as any).faturaLinks) {
+            (allT[tIndex] as any).faturaLinks = (allT[tIndex] as any).faturaLinks.filter((l: any) => l.mes !== mesAlvo);
             db.save(allT);
             refreshData();
         }
@@ -224,7 +241,7 @@ export default function CreditCards() {
         setTargetInvoiceMonth(null);
     };
 
-    const monthOptions = mesesDisponiveis.map(m => {
+    const monthOptions: SelectOption[] = mesesDisponiveis.map(m => {
         const fat = faturas[m];
         let icon = "";
         if (fat.status === "PAGO") icon = "✅";
@@ -246,7 +263,7 @@ export default function CreditCards() {
         );
     }
 
-    const faturaAtual = faturas[selectedInvoiceMonth];
+    const faturaAtual = selectedInvoiceMonth ? faturas[selectedInvoiceMonth] : null;
 
     return (
         <div className="container mt-4 pb-5 fade-in">
@@ -257,7 +274,7 @@ export default function CreditCards() {
 
             {/* ABAS DOS CARTÕES */}
             <ul className="nav nav-pills mb-4 gap-2 overflow-auto flex-nowrap" style={{scrollbarWidth: 'none'}}>
-                {cartoesDaConta.map((c) => (
+                {cartoesDaConta.map((c: any) => (
                     <li className="nav-item flex-shrink-0" key={c.id}>
                         <button 
                             className={`nav-link px-4 rounded-pill border ${c.id === selectedCardId ? "bg-warning text-dark border-warning fw-bold" : "bg-transparent text-light border-secondary border-opacity-50"}`} 
@@ -277,7 +294,7 @@ export default function CreditCards() {
                                 <label className="small text-muted mb-2 text-uppercase fw-bold">Fatura (Fecha dia {closingDay})</label>
                                 
                                 <div className="input-group flex-nowrap justify-content-center justify-content-md-start position-relative" style={{ zIndex: 105, width: '100%' }}>
-                                    <button className="btn btn-outline-secondary border-secondary text-white-50 radius-left-8" onClick={() => navegarFatura(1)} disabled={mesesDisponiveis.indexOf(selectedInvoiceMonth) === mesesDisponiveis.length - 1}><i className="bi bi-chevron-left"></i></button>
+                                    <button className="btn btn-outline-secondary border-secondary text-white-50 radius-left-8" onClick={() => navegarFatura(1)} disabled={selectedInvoiceMonth ? mesesDisponiveis.indexOf(selectedInvoiceMonth) === mesesDisponiveis.length - 1 : true}><i className="bi bi-chevron-left"></i></button>
                                     
                                     <div className="position-relative z-150" style={{ minWidth: '220px', maxWidth: '300px' }}>
                                         <div className="h-100 mx-n1">
@@ -291,7 +308,7 @@ export default function CreditCards() {
                                         </div>
                                     </div>
 
-                                    <button className="btn btn-outline-secondary border-secondary text-white-50 radius-right-8" onClick={() => navegarFatura(-1)} disabled={mesesDisponiveis.indexOf(selectedInvoiceMonth) === 0}><i className="bi bi-chevron-right"></i></button>
+                                    <button className="btn btn-outline-secondary border-secondary text-white-50 radius-right-8" onClick={() => navegarFatura(-1)} disabled={selectedInvoiceMonth ? mesesDisponiveis.indexOf(selectedInvoiceMonth) === 0 : true}><i className="bi bi-chevron-right"></i></button>
                                 </div>
                             </div>
                             <div className="col-md-6 text-center text-md-end border-start border-secondary border-opacity-25 d-none d-md-block">
@@ -352,7 +369,7 @@ export default function CreditCards() {
                             {[...faturaAtual.gastos, ...faturaAtual.pagamentosVinculados].sort((a, b) => {
                                 const [da, ma, ya] = a.data.split("/");
                                 const [db, mb, yb] = b.data.split("/");
-                                return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db);
+                                return new Date(ya, ma - 1, da).getTime() - new Date(yb, mb - 1, db).getTime();
                             }).map(t => {
                                 const isPagamento = t.tipo === "Pagamento de Fatura";
                                 const valorExibido = isPagamento ? t.valorVinculado || t.valor : Math.abs(t.valor);
@@ -422,7 +439,7 @@ export default function CreditCards() {
                                                         {fat.pagamentosVinculados && fat.pagamentosVinculados.length > 0 && (
                                                             <div className="mt-3 pt-3 border-top border-secondary border-opacity-25">
                                                                 <small className="text-muted d-block mb-2 text-uppercase text-micro">Recibos Atrelados:</small>
-                                                                {fat.pagamentosVinculados.map(v => (
+                                                                {fat.pagamentosVinculados.map((v: any) => (
                                                                     <div key={v.identificador} className="d-flex justify-content-between align-items-center mb-2 px-3 py-2 rounded" style={{backgroundColor: 'rgba(255,255,255,0.05)'}}>
                                                                         <span className="text-light small d-flex align-items-center">
                                                                             <i className="bi bi-check-circle-fill text-success me-2"></i>
@@ -447,13 +464,12 @@ export default function CreditCards() {
                             {/* PASSO 2: ESCOLHER OS RECIBOS (MÚLTIPLOS) */}
                             {linkStep === 2 && (
                                 <div className="fade-in">
-                                    {/* Isolamos em uma função auto-invocada para calcular totais antes de renderizar */}
                                     {(() => {
                                         const totalSelecionado = Array.from(selectedPaymentIds).reduce((acc, id) => {
                                             const p = pagamentosProcessados.find(x => x.original.identificador === id);
                                             return acc + (p ? p.disponivel : 0);
                                         }, 0);
-                                        const faturaAlvo = faturas[targetInvoiceMonth];
+                                        const faturaAlvo = targetInvoiceMonth ? faturas[targetInvoiceMonth] : null;
                                         const saldoFatura = faturaAlvo ? faturaAlvo.saldoRestante : 0;
 
                                         return (
@@ -471,7 +487,7 @@ export default function CreditCards() {
                                                         <i className="bi bi-info-circle fs-4"></i>
                                                         <div>
                                                             <div className="fw-bold small text-uppercase">Destino dos Pagamentos</div>
-                                                            <div className="fs-5 fw-bold text-light">Fatura de {formatMonthLabel(targetInvoiceMonth)}</div>
+                                                            <div className="fs-5 fw-bold text-light">Fatura de {targetInvoiceMonth ? formatMonthLabel(targetInvoiceMonth) : ''}</div>
                                                         </div>
                                                     </div>
 
@@ -482,7 +498,7 @@ export default function CreditCards() {
                                                             if (esgotadoA !== esgotadoB) return esgotadoA ? 1 : -1;
                                                             const [da, ma, ya] = a.original.data.split("/");
                                                             const [db, mb, yb] = b.original.data.split("/");
-                                                            return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da);
+                                                            return new Date(parseInt(yb), parseInt(mb) - 1, parseInt(db)).getTime() - new Date(parseInt(ya), parseInt(ma) - 1, parseInt(da)).getTime();
                                                         }).map(p => {
                                                             const esgotado = p.disponivel <= 0.01;
                                                             const isSelected = selectedPaymentIds.has(p.original.identificador);

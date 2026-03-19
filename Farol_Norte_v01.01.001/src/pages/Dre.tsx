@@ -1,54 +1,87 @@
-// src/pages/Dre.jsx
+// src/pages/Dre.tsx
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { formatCurrency } from '../utils/formatters';
-import CustomSelect from '../components/CustomSelect.jsx';
+import CustomSelect, { SelectOption } from '../components/CustomSelect';
+import type { Account, Category, Transaction } from '../types/index';
+
+// =========================================================
+// INTERFACES LOCAIS
+// =========================================================
+interface DreItem {
+    nome: string;
+    valor: number;
+}
+
+interface DreGroup {
+    total: number;
+    items: Record<string, number>;
+    sortedItems?: DreItem[];
+}
+
+interface ExpandSectionsState {
+    essencial: boolean;
+    estilo_vida: boolean;
+    investimento: boolean;
+}
 
 export default function Dre() {
-    const { transactions = [], accounts = [], categories = [], currentAccountId, changeAccount } = useFinance();
+    const { 
+        transactions = [], 
+        accounts = [], 
+        categories = [], 
+        currentAccountId = 'all', 
+        changeAccount = () => {} 
+    } = useFinance();
 
-    // 1. Estados
-    const [selectedMonth, setSelectedMonth] = useState(() => localStorage.getItem("dashboard_last_month") || new Date().toISOString().slice(0, 7));
-    const [expandSections, setExpandSections] = useState({ essencial: false, estilo_vida: false, investimento: false });
+    // ==========================================
+    // 1. ESTADOS
+    // ==========================================
+    const [selectedMonth, setSelectedMonth] = useState<string>(() => localStorage.getItem("dashboard_last_month") || new Date().toISOString().slice(0, 7));
+    const [expandSections, setExpandSections] = useState<ExpandSectionsState>({ essencial: false, estilo_vida: false, investimento: false });
 
-    // 2. Filtro de Meses Disponíveis
+    // ==========================================
+    // 2. FILTRO DE MESES DISPONÍVEIS
+    // ==========================================
     const availableMonths = useMemo(() => {
-        const meses = new Set();
+        const meses = new Set<string>();
         meses.add(new Date().toISOString().slice(0, 7));
-        transactions.forEach((t) => {
+        transactions.forEach((t: any) => {
             const parts = t.data?.split("/");
             if (parts?.length === 3) meses.add(`${parts[2]}-${parts[1]}`);
         });
         return Array.from(meses).sort().reverse();
     }, [transactions]);
 
+    // ==========================================
     // 3. O MOTOR DO DRE (Agrupamento e Cálculo)
+    // ==========================================
     const dreData = useMemo(() => {
         const [ano, mes] = selectedMonth.split("-");
         
         let receitas = 0;
-        const grupos = {
+        const grupos: Record<string, DreGroup> = {
             essencial: { total: 0, items: {} },
             estilo_vida: { total: 0, items: {} },
             investimento: { total: 0, items: {} },
             nao_classificado: { total: 0, items: {} }
         };
 
-        const currentMonthData = transactions.filter(t => {
+        const currentMonthData = transactions.filter((t: any) => {
             if (currentAccountId !== "all" && t.account_id !== currentAccountId) return false;
             if (t.tipo === "Pagamento de Fatura" || t.ignorarNoFluxo) return false;
             const parts = t.data?.split("/");
             return parts?.[2] === ano && parts?.[1] === mes;
         });
 
-        currentMonthData.forEach(t => {
+        currentMonthData.forEach((t: any) => {
             if (t.valor > 0) {
                 receitas += t.valor;
             } else {
-                const processarDespesa = (categoriaNome, valorDespesa) => {
-                    const catObj = categories.find(c => c.nome === categoriaNome);
+                const processarDespesa = (categoriaNome: string, valorDespesa: number) => {
+                    const catObj = categories.find((c: any) => c.nome === categoriaNome);
                     // Fallback: se não achar a categoria ou não tiver relevância, joga para essencial
-                    const rel = catObj?.relevancia || 'essencial';
+                    const rel = (catObj as any)?.relevancia || 'essencial';
                     
                     if (!grupos[rel]) grupos[rel] = { total: 0, items: {} };
                     grupos[rel].total += Math.abs(valorDespesa);
@@ -56,7 +89,7 @@ export default function Dre() {
                 };
 
                 if (t.split && t.split.length > 0) {
-                    t.split.forEach(s => processarDespesa(s.categoria || "Não classificada", s.valor));
+                    t.split.forEach((s: any) => processarDespesa(s.categoria || "Não classificada", s.valor));
                 } else {
                     processarDespesa(t.categoria || "Não classificada", t.valor);
                 }
@@ -83,8 +116,10 @@ export default function Dre() {
         return { receitas, grupos, margemSobrevivencia, margemLivre, resultadoFinal, pctEssencial, pctEstiloVida, pctInvestimento };
     }, [transactions, categories, selectedMonth, currentAccountId]);
 
-    // 4. Componentes Visuais
-    const navegarMes = (dir) => {
+    // ==========================================
+    // 4. FUNÇÕES VISUAIS E DE NAVEGAÇÃO
+    // ==========================================
+    const navegarMes = (dir: number) => {
         const idx = availableMonths.indexOf(selectedMonth) + dir;
         if (idx >= 0 && idx < availableMonths.length) {
             setSelectedMonth(availableMonths[idx]);
@@ -92,20 +127,28 @@ export default function Dre() {
         }
     };
 
-    const toggleSection = (section) => setExpandSections(prev => ({ ...prev, [section]: !prev[section] }));
+    const toggleSection = (section: keyof ExpandSectionsState) => {
+        setExpandSections(prev => ({ ...prev, [section]: !prev[section] }));
+    };
 
-    const accountOptions = [
+    // ==========================================
+    // 5. OPÇÕES PARA OS SELECTS
+    // ==========================================
+    const accountOptions: SelectOption[] = [
         { value: 'all', label: '🏦 Todas as Contas' },
-        ...accounts.map(acc => ({ value: acc.id, label: acc.nome }))
+        ...accounts.map((acc: any) => ({ value: acc.id, label: acc.nome }))
     ];
 
-    const monthOptions = availableMonths.map(mesIso => {
+    const monthOptions: SelectOption[] = availableMonths.map(mesIso => {
         const [ano, mes] = mesIso.split('-');
-        const dateObj = new Date(ano, mes - 1, 1);
+        const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
         const nome = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
         return { value: mesIso, label: nome.charAt(0).toUpperCase() + nome.slice(1) };
     });
 
+    // ==========================================
+    // 6. RENDERIZAÇÃO
+    // ==========================================
     return (
         <div className="container mt-4 fade-in pb-5">
             {/* HEADER TOOLBAR */}
@@ -172,7 +215,7 @@ export default function Dre() {
                             
                             {expandSections.essencial && (
                                 <div className="mt-4 pt-3 border-top border-secondary border-opacity-25 fade-in">
-                                    {dreData.grupos.essencial.sortedItems.map(item => (
+                                    {dreData.grupos.essencial.sortedItems?.map(item => (
                                         <div key={item.nome} className="d-flex justify-content-between py-2 px-3 mb-1 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
                                             <span className="text-muted small">{item.nome}</span>
                                             <span className="text-light small fw-bold">{formatCurrency(item.valor)}</span>
@@ -208,7 +251,7 @@ export default function Dre() {
 
                             {expandSections.estilo_vida && (
                                 <div className="mt-4 pt-3 border-top border-secondary border-opacity-25 fade-in">
-                                    {dreData.grupos.estilo_vida.sortedItems.map(item => (
+                                    {dreData.grupos.estilo_vida.sortedItems?.map(item => (
                                         <div key={item.nome} className="d-flex justify-content-between py-2 px-3 mb-1 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
                                             <span className="text-muted small">{item.nome}</span>
                                             <span className="text-light small fw-bold">{formatCurrency(item.valor)}</span>
@@ -244,7 +287,7 @@ export default function Dre() {
 
                             {expandSections.investimento && (
                                 <div className="mt-4 pt-3 border-top border-secondary border-opacity-25 fade-in">
-                                    {dreData.grupos.investimento.sortedItems.map(item => (
+                                    {dreData.grupos.investimento.sortedItems?.map(item => (
                                         <div key={item.nome} className="d-flex justify-content-between py-2 px-3 mb-1 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
                                             <span className="text-muted small">{item.nome}</span>
                                             <span className="text-light small fw-bold">{formatCurrency(item.valor)}</span>

@@ -1,25 +1,45 @@
-// src/pages/Categories.jsx
+// src/pages/Categories.tsx
 import React, { useState, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { categoryDb, rulesDb, db } from '../services/DataService';
-import CustomSelect from '../components/CustomSelect.jsx';
+import CustomSelect, { SelectOption } from '../components/CustomSelect';
+import type { Category, CategorizationRule } from '../types/index';
 
+// =========================================================
+// INTERFACES LOCAIS
+// =========================================================
+interface ModalCatState {
+    show: boolean;
+    isEditing: boolean;
+    oldName: string;
+    nome: string;
+    cor: string;
+    criarRegra: boolean;
+    termoRegra: string;
+    natureza: string;
+    relevancia: string;
+}
+
+interface ModalRuleState {
+    show: boolean;
+    termo: string;
+    categoria: string;
+}
 
 export default function Categories() {
     const { 
-            categories = [], 
-            refreshData 
-        } = useFinance() || {};
+        categories = [], 
+        refreshData = () => {} 
+    } = useFinance();
     
-    const [rules, setRules] = useState([]);
+    const [rules, setRules] = useState<CategorizationRule[]>([]);
     
-    // ATUALIZADO: Adicionado isEditing e oldName
-    const [modalCat, setModalCat] = useState({ 
+    const [modalCat, setModalCat] = useState<ModalCatState>({ 
         show: false, isEditing: false, oldName: '', nome: '', cor: '#F2B705', 
         criarRegra: false, termoRegra: '', natureza: 'variavel', relevancia: 'essencial' 
     });
     
-    const [modalRule, setRuleModal] = useState({ show: false, termo: '', categoria: '' });
+    const [modalRule, setRuleModal] = useState<ModalRuleState>({ show: false, termo: '', categoria: '' });
 
     useEffect(() => {
         setRules(rulesDb.getAll());
@@ -28,13 +48,13 @@ export default function Categories() {
     // ==========================================
     // HELPERS VISUAIS (Matriz 2x2)
     // ==========================================
-    const getNaturezaInfo = (nat) => {
+    const getNaturezaInfo = (nat: string) => {
         if (nat === 'fixa') return { label: 'Fixa', icon: '📅', color: 'text-info border-info' };
         if (nat === 'eventual') return { label: 'Eventual', icon: '⚡', color: 'text-warning border-warning' };
         return { label: 'Variável', icon: '📉', color: 'text-light border-secondary' };
     };
 
-    const getRelevanciaInfo = (rel) => {
+    const getRelevanciaInfo = (rel: string) => {
         if (rel === 'estilo_vida') return { label: 'Estilo de Vida', icon: '✨', color: 'text-warning border-warning' };
         if (rel === 'investimento') return { label: 'Investimento', icon: '🚀', color: 'text-success border-success' };
         return { label: 'Essencial', icon: '🛡️', color: 'text-primary border-primary' };
@@ -43,7 +63,7 @@ export default function Categories() {
     // ==========================================
     // LÓGICA DE SALVAMENTO DE CATEGORIAS
     // ==========================================
-    const handleSaveCategory = (e) => {
+    const handleSaveCategory = (e: React.FormEvent) => {
         e.preventDefault();
         const nomeFormatado = modalCat.nome.trim();
         if (!nomeFormatado) return alert("Digite um nome para a categoria.");
@@ -51,12 +71,11 @@ export default function Categories() {
         const allCats = categoryDb.getAll();
 
         if (modalCat.isEditing) {
-            // Se mudou o nome, verifica se não colidiu com outra
-            if (nomeFormatado.toLowerCase() !== modalCat.oldName.toLowerCase() && allCats.find(c => c.nome.toLowerCase() === nomeFormatado.toLowerCase())) {
+            if (nomeFormatado.toLowerCase() !== modalCat.oldName.toLowerCase() && 
+                allCats.find(c => c.nome.toLowerCase() === nomeFormatado.toLowerCase())) {
                 return alert("Já existe outra categoria com este nome.");
             }
 
-            // VARREDURA MÁGICA: Atualiza as transações antigas se o nome mudar
             if (nomeFormatado !== modalCat.oldName) {
                 const todasTransacoes = db.getAll();
                 let updated = false;
@@ -66,7 +85,7 @@ export default function Categories() {
                         updated = true;
                     }
                     if (t.split && t.split.length > 0) {
-                        t.split.forEach(s => {
+                        t.split.forEach((s) => {
                             if (s.categoria === modalCat.oldName) {
                                 s.categoria = nomeFormatado;
                                 updated = true;
@@ -77,16 +96,15 @@ export default function Categories() {
                 if (updated) db.save(todasTransacoes);
             }
 
-            // Atualiza os dados da categoria
+            // Tipagem estrita de acordo com o index.ts
             categoryDb.update(modalCat.oldName, {
                 nome: nomeFormatado,
                 cor: modalCat.cor,
-                natureza: modalCat.natureza,
-                relevancia: modalCat.relevancia
+                natureza: modalCat.natureza as any,
+                relevancia: modalCat.relevancia as any
             });
 
         } else {
-            // CRIAÇÃO NOVA
             if (modalCat.criarRegra && !modalCat.termoRegra.trim()) {
                 return alert("Você marcou a opção de regra automática. Por favor, digite o termo.");
             }
@@ -95,15 +113,23 @@ export default function Categories() {
                 return alert("Já existe uma categoria com este nome.");
             }
 
-            allCats.push({ 
-                nome: nomeFormatado, cor: modalCat.cor, tipo: 'despesa',
-                natureza: modalCat.natureza, relevancia: modalCat.relevancia
-            });
+            const newCat: Category = { 
+                nome: nomeFormatado, 
+                cor: modalCat.cor, 
+                tipo: 'despesa',
+                natureza: modalCat.natureza as any, 
+                relevancia: modalCat.relevancia as any
+            };
+
+            allCats.push(newCat);
             categoryDb.save(allCats);
 
             if (modalCat.criarRegra && modalCat.termoRegra.trim()) {
                 const allRules = rulesDb.getAll();
-                allRules.push({ term: modalCat.termoRegra.trim().toLowerCase(), category: nomeFormatado });
+                allRules.push({ 
+                    term: modalCat.termoRegra.trim().toLowerCase(), 
+                    category: nomeFormatado
+                });
                 rulesDb.save(allRules);
                 setRules(rulesDb.getAll());
             }
@@ -113,7 +139,7 @@ export default function Categories() {
         setModalCat({ show: false, isEditing: false, oldName: '', nome: '', cor: '#F2B705', criarRegra: false, termoRegra: '', natureza: 'variavel', relevancia: 'essencial' });
     };
 
-    const handleDeleteCategory = (nome) => {
+    const handleDeleteCategory = (nome: string) => {
         const msg = `⚠️ ATENÇÃO: Você está apagando a categoria "${nome}".\n\nIsso fará com que TODAS as transações vinculadas a ela voltem a ficar "Não classificada".\n\nDeseja realmente continuar?`;
         if (!window.confirm(msg)) return;
 
@@ -132,21 +158,31 @@ export default function Categories() {
         alert(`Categoria apagada! ${count} transações foram reclassificadas.`);
     };
 
-    // Lógica de regras automáticas 
-    const handleSaveRule = (e) => {
+    // ==========================================
+    // LÓGICA DE REGRAS AUTOMÁTICAS
+    // ==========================================
+    const handleSaveRule = (e: React.FormEvent) => {
         e.preventDefault();
         const termo = modalRule.termo.trim().toLowerCase();
         if (!termo || !modalRule.categoria) return alert("Preencha todos os campos.");
+        
         const allRules = rulesDb.getAll();
         const ruleIndex = allRules.findIndex(r => r.term === termo);
-        if (ruleIndex > -1) allRules[ruleIndex].category = modalRule.categoria;
-        else allRules.push({ term: termo, category: modalRule.categoria });
+        
+        if (ruleIndex > -1) {
+            allRules[ruleIndex].category = modalRule.categoria;
+        } else {
+            allRules.push({ 
+                term: termo, 
+                category: modalRule.categoria
+            });
+        }
         rulesDb.save(allRules);
         setRules(rulesDb.getAll());
         setRuleModal({ show: false, termo: '', categoria: '' });
     };
 
-    const handleDeleteRule = (termo) => {
+    const handleDeleteRule = (termo: string) => {
         if (!window.confirm(`Remover a regra para "${termo}"?`)) return;
         const novasRegras = rulesDb.getAll().filter(r => r.term !== termo);
         rulesDb.save(novasRegras);
@@ -160,7 +196,7 @@ export default function Categories() {
         const transacoes = db.getAll();
         let alteradas = 0;
         transacoes.forEach(t => {
-            const descricaoLower = (t.descricao || t.nome || '').toLowerCase();
+            const descricaoLower = (t.nome || '').toLowerCase();
             const regraEncontrada = rules.find(r => descricaoLower.includes(r.term.toLowerCase()));
             if (regraEncontrada && t.categoria !== regraEncontrada.category) {
                 t.categoria = regraEncontrada.category;
@@ -180,19 +216,19 @@ export default function Categories() {
     // ==========================================
     // OPÇÕES DOS SELECTS CUSTOMIZADOS
     // ==========================================
-    const categoryOptions = [
+    const categoryOptions: SelectOption[] = [
         { value: '', label: 'Selecione a Categoria...' },
         { value: 'disabled', label: '---', disabled: true },
         ...categories.map(c => ({ value: c.nome, label: c.nome }))
     ];
 
-    const naturezaOptions = [
+    const naturezaOptions: SelectOption[] = [
         { value: 'fixa', label: '📅 Fixa (Previsível, todo mês)' },
         { value: 'variavel', label: '📉 Variável (Oscila, frequente)' },
         { value: 'eventual', label: '⚡ Eventual (Sazonal, anomalia)' }
     ];
 
-    const relevanciaOptions = [
+    const relevanciaOptions: SelectOption[] = [
         { value: 'essencial', label: '🛡️ Essencial (Sobrevivência)' },
         { value: 'estilo_vida', label: '✨ Estilo de Vida (Desejos)' },
         { value: 'investimento', label: '🚀 Investimento (Futuro/Construção)' }
@@ -217,31 +253,36 @@ export default function Categories() {
                         </div>
                         <div className="card-body p-0">
                             <div className="list-group list-group-flush bg-transparent scrollable-menu" style={{ maxHeight: '600px' }}>
-                                {categories.map(cat => {
-                                    const natInfo = getNaturezaInfo(cat.natureza);
-                                    const relInfo = getRelevanciaInfo(cat.relevancia);
+                                {categories.map((cat: Category) => {
+                                    const catName = cat.nome;
+                                    const catNature = cat.natureza;
+                                    const catRelevance = cat.relevancia;
+                                    const catColor = cat.cor || '#F2B705';
+
+                                    const natInfo = getNaturezaInfo(catNature);
+                                    const relInfo = getRelevanciaInfo(catRelevance);
+                                    
                                     return (
-                                        <div key={cat.nome} className="list-group-item bg-transparent text-light border-bottom border-secondary border-opacity-25 d-flex justify-content-between align-items-center py-3 px-4 hover-opacity">
+                                        <div key={catName} className="list-group-item bg-transparent text-light border-bottom border-secondary border-opacity-25 d-flex justify-content-between align-items-center py-3 px-4 hover-opacity">
                                             <div className="d-flex align-items-center gap-3">
-                                                <div className="shadow-sm" style={{ width: '16px', height: '16px', backgroundColor: cat.cor || 'var(--text-muted)', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.1)' }}></div>
+                                                <div className="shadow-sm" style={{ width: '16px', height: '16px', backgroundColor: catColor, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.1)' }}></div>
                                                 <div>
-                                                    <span className="fw-bold d-block text-light">{cat.nome}</span>
+                                                    <span className="fw-bold d-block text-light">{catName}</span>
                                                     <div className="d-flex gap-2 mt-1">
                                                         <span className={`badge bg-transparent border border-opacity-50 text-micro ${natInfo.color}`}>{natInfo.icon} {natInfo.label}</span>
                                                         <span className={`badge bg-transparent border border-opacity-50 text-micro ${relInfo.color}`}>{relInfo.icon} {relInfo.label}</span>
                                                     </div>
                                                 </div>
                                             </div>
-                                            {/* Botões de Editar e Excluir */}
                                             <div className="btn-group">
                                                 <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalCat({
-                                                    show: true, isEditing: true, oldName: cat.nome, nome: cat.nome, cor: cat.cor || '#F2B705', 
-                                                    natureza: cat.natureza || 'variavel', relevancia: cat.relevancia || 'essencial', 
+                                                    show: true, isEditing: true, oldName: catName, nome: catName, cor: catColor, 
+                                                    natureza: catNature, relevancia: catRelevance, 
                                                     criarRegra: false, termoRegra: ''
                                                 })}>
                                                     <i className="bi bi-pencil fs-6"></i>
                                                 </button>
-                                                <button className="btn btn-sm btn-outline-danger border-0 opacity-50" onClick={() => handleDeleteCategory(cat.nome)}>
+                                                <button className="btn btn-sm btn-outline-danger border-0 opacity-50" onClick={() => handleDeleteCategory(catName)}>
                                                     <i className="bi bi-trash fs-6"></i>
                                                 </button>
                                             </div>
@@ -275,17 +316,19 @@ export default function Categories() {
                                 {rules.length === 0 ? (
                                     <div className="p-5 text-center text-muted">Nenhuma automação ativa.</div>
                                 ) : (
-                                    rules.map((r, idx) => (
-                                        <div key={idx} className="list-group-item bg-transparent text-light border-bottom border-secondary border-opacity-25 d-flex justify-content-between align-items-center py-3 px-4 hover-opacity">
-                                            <div>
-                                                <span className="text-muted text-xxs me-2">Se conter</span>
-                                                <span className="badge bg-transparent border border-secondary border-opacity-50 fw-bold fs-6 text-warning">"{r.term}"</span> 
-                                                <i className="bi bi-arrow-right text-muted mx-2"></i> 
-                                                <span className="badge bg-secondary bg-opacity-25 fw-normal fs-6 ms-1">{r.category}</span>
+                                    rules.map((r, idx) => {
+                                        return (
+                                            <div key={idx} className="list-group-item bg-transparent text-light border-bottom border-secondary border-opacity-25 d-flex justify-content-between align-items-center py-3 px-4 hover-opacity">
+                                                <div>
+                                                    <span className="text-muted text-xxs me-2">Se conter</span>
+                                                    <span className="badge bg-transparent border border-secondary border-opacity-50 fw-bold fs-6 text-warning">"{r.term}"</span> 
+                                                    <i className="bi bi-arrow-right text-muted mx-2"></i> 
+                                                    <span className="badge bg-secondary bg-opacity-25 fw-normal fs-6 ms-1">{r.category}</span>
+                                                </div>
+                                                <button className="btn btn-sm btn-outline-danger border-0 opacity-50" onClick={() => handleDeleteRule(r.term)}><i className="bi bi-x-lg"></i></button>
                                             </div>
-                                            <button className="btn btn-sm btn-outline-danger border-0 opacity-50" onClick={() => handleDeleteRule(r.term)}><i className="bi bi-x-lg"></i></button>
-                                        </div>
-                                    ))
+                                        )
+                                    })
                                 )}
                             </div>
                         </div>
@@ -293,9 +336,7 @@ export default function Categories() {
                 </div>
             </div>
 
-            {/* ========================================== */}
-            {/* MODAL: NOVA/EDITAR CATEGORIA */}
-            {/* ========================================== */}
+            {/* MODAIS */}
             {modalCat.show && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1060 }}>
                     <div className="modal-dialog modal-dialog-centered modal-lg">
@@ -309,7 +350,6 @@ export default function Categories() {
                                     <button type="button" className="btn-close btn-close-white" onClick={() => setModalCat({...modalCat, show: false})}></button>
                                 </div>
                                 <div className="modal-body p-4">
-                                    
                                     <div className="row mb-4">
                                         <div className="col-md-8 mb-3 mb-md-0">
                                             <label className="form-label fw-bold text-muted text-xxs text-uppercase">Nome da Categoria</label>
@@ -320,8 +360,6 @@ export default function Categories() {
                                             <input type="color" className="form-control form-control-color w-100 border-0 bg-transparent p-0" style={{height: '45px'}} value={modalCat.cor} onChange={e => setModalCat({...modalCat, cor: e.target.value})} />
                                         </div>
                                     </div>
-
-                                    {/* OS NOVOS EIXOS DA MATRIZ */}
                                     <div className="bg-white theme-surface bg-opacity-5 p-4 radius-12 border border-secondary border-opacity-25 mb-4 position-relative" style={{ zIndex: 105 }}>
                                         <h6 className="fw-bold text-warning mb-3 text-uppercase text-xxs"><i className="bi bi-grid-3x3 me-2"></i>Matriz de Inteligência Financeira</h6>
                                         <div className="row g-3">
@@ -335,8 +373,6 @@ export default function Categories() {
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* AUTOMAÇÃO - Só mostra ao criar nova para não complicar a edição */}
                                     {!modalCat.isEditing && (
                                         <div className="bg-white theme-surface bg-opacity-5 p-3 radius-12 border border-secondary border-opacity-10 position-relative" style={{ zIndex: 104 }}>
                                             <div className="form-check form-switch mb-0">
@@ -351,7 +387,6 @@ export default function Categories() {
                                             )}
                                         </div>
                                     )}
-
                                 </div>
                                 <div className="modal-footer border-top border-secondary border-opacity-25 px-4 py-3">
                                     <button type="button" className="btn btn-outline-light border-0 me-2" onClick={() => setModalCat({...modalCat, show: false})}>Cancelar</button>
@@ -363,7 +398,6 @@ export default function Categories() {
                 </div>
             )}
 
-            {/* MODAL DE REGRAS MANTIDO IDÊNTICO AO CÓDIGO ANTERIOR... */}
             {modalRule.show && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1060 }}>
                     <div className="modal-dialog modal-dialog-centered">

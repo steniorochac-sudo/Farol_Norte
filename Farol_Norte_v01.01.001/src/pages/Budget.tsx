@@ -1,72 +1,93 @@
-// src/pages/Budget.jsx
+// src/pages/Budget.tsx
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { budgetDb } from '../services/DataService';
 import { formatCurrency } from '../utils/formatters';
-import CustomSelect from '../components/CustomSelect.jsx'; // 1. IMPORTAMOS O COMPONENTE
+import CustomSelect, { SelectOption } from '../components/CustomSelect';
+
+// =========================================================
+// INTERFACES LOCAIS
+// =========================================================
+interface CategoriaProcessada {
+    nome: string;
+    cor: string;
+    limite: number;
+    gasto: number;
+    percent: number;
+    progressColor: string;
+}
 
 export default function Budget() {
     const { 
-            transactions = [], 
-            accounts = [], 
-            categories = [], 
-            currentAccountId, 
-            changeAccount, 
-        } = useFinance() || {};
+        transactions = [], 
+        accounts = [], 
+        categories = [], 
+        currentAccountId = 'all', 
+        changeAccount = () => {}, 
+    } = useFinance();
 
-    // Estados Reativos
-    const [selectedMonth, setSelectedMonth] = useState(() => localStorage.getItem('budget_last_month') || new Date().toISOString().slice(0, 7));
-    const [budgets, setBudgets] = useState(() => budgetDb.getAll());
+    // ==========================================
+    // ESTADOS REATIVOS
+    // ==========================================
+    const [selectedMonth, setSelectedMonth] = useState<string>(() => localStorage.getItem('budget_last_month') || new Date().toISOString().slice(0, 7));
+    const [budgets, setBudgets] = useState<Record<string, number>>(() => budgetDb.getAll());
 
-    // 1. Calcula meses disponíveis
+    // ==========================================
+    // 1. CÁLCULO DE MESES DISPONÍVEIS
+    // ==========================================
     const availableMonths = useMemo(() => {
-        const meses = new Set();
+        const meses = new Set<string>();
         meses.add(new Date().toISOString().slice(0, 7));
-        transactions.forEach(t => {
+        
+        transactions.forEach((t: any) => {
             if (t.data) {
                 const parts = t.data.split('/');
                 if (parts.length === 3) meses.add(`${parts[2]}-${parts[1]}`);
             }
         });
+        
         return Array.from(meses).sort().reverse();
     }, [transactions]);
 
-    // 2. Manipuladores de Eventos
-    const handleMonthChange = (e) => {
-        setSelectedMonth(e.target.value);
-        localStorage.setItem('budget_last_month', e.target.value);
+    // ==========================================
+    // 2. MANIPULADORES DE EVENTOS
+    // ==========================================
+    const handleMonthChange = (val: string) => {
+        setSelectedMonth(val);
+        localStorage.setItem('budget_last_month', val);
     };
-    const navegarMes = (dir) => {
+
+    const navegarMes = (dir: number) => {
         const idx = availableMonths.indexOf(selectedMonth) + dir;
         if (idx >= 0 && idx < availableMonths.length) {
-            handleMonthChange({ target: { value: availableMonths[idx] } });
+            handleMonthChange(availableMonths[idx]);
         }
     };
 
-    const handleLimitChange = (categoria, valor) => {
+    const handleLimitChange = (categoria: string, valor: string) => {
         const num = parseFloat(valor) || 0;
         budgetDb.setLimit(categoria, num);
-        setBudgets({ ...budgetDb.getAll() }); // Atualiza estado local para forçar renderização da barra de progresso
+        setBudgets({ ...budgetDb.getAll() }); // Atualiza estado local para forçar re-render da barra
     };
 
     const aplicarMediaHistorica = () => {
         if (!window.confirm("Atenção: Isso irá sobrescrever as metas atuais com base na média dos seus gastos nos últimos 3 meses.\n\nDeseja continuar?")) return;
 
         const hoje = new Date();
-        const somaPorCat = {};
+        const somaPorCat: Record<string, number> = {};
 
-        transactions.forEach(t => {
+        transactions.forEach((t: any) => {
             if (!t.data || t.valor >= 0 || t.tipo === 'Pagamento de Fatura' || t.tipoLancamento === 'transferencia') return;
 
             const [d, m, y] = t.data.split('/');
-            const dataTransacao = new Date(y, m - 1, d);
-            const diffTime = Math.abs(hoje - dataTransacao);
+            const dataTransacao = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+            const diffTime = Math.abs(hoje.getTime() - dataTransacao.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             // Pega transações dos últimos 90 dias
             if (diffDays <= 90) {
                 if (t.split && t.split.length > 0) {
-                    t.split.forEach(s => {
+                    t.split.forEach((s: any) => {
                         const cat = s.categoria || 'Não classificada';
                         somaPorCat[cat] = (somaPorCat[cat] || 0) + Math.abs(s.valor);
                     });
@@ -78,12 +99,15 @@ export default function Budget() {
         });
 
         let alterados = 0;
-        categories.forEach(cat => {
-            const totalUltimos3Meses = somaPorCat[cat.nome] || 0;
+        categories.forEach((cat: any) => {
+            const catNome = cat.nome;
+            if (!catNome) return;
+            
+            const totalUltimos3Meses = somaPorCat[catNome] || 0;
             if (totalUltimos3Meses > 0) {
                 const media = Math.ceil(totalUltimos3Meses / 3);
                 const metaSugerida = Math.ceil(media / 10) * 10; // Arredonda para a dezena mais próxima
-                budgetDb.setLimit(cat.nome, metaSugerida);
+                budgetDb.setLimit(catNome, metaSugerida);
                 alterados++;
             }
         });
@@ -92,13 +116,15 @@ export default function Budget() {
         alert(`Orçamentos atualizados! ${alterados} categorias foram ajustadas baseadas na sua média.`);
     };
 
-    // 3. Motor Principal: Cruzamento de Transações vs Orçamento
+    // ==========================================
+    // 3. MOTOR PRINCIPAL (Transações vs Orçamento)
+    // ==========================================
     const budgetData = useMemo(() => {
         const [anoStr, mesStr] = selectedMonth.split('-');
-        const gastosReais = {};
+        const gastosReais: Record<string, number> = {};
         let totalGasto = 0;
 
-        transactions.forEach(t => {
+        transactions.forEach((t: any) => {
             if (currentAccountId !== 'all' && t.account_id !== currentAccountId) return;
             if (!t.data) return;
 
@@ -110,7 +136,7 @@ export default function Budget() {
                 t.tipo !== 'Pagamento de Fatura') {
 
                 if (t.split && t.split.length > 0) {
-                    t.split.forEach(s => {
+                    t.split.forEach((s: any) => {
                         const cat = s.categoria || 'Não classificada';
                         gastosReais[cat] = (gastosReais[cat] || 0) + Math.abs(s.valor);
                         totalGasto += Math.abs(s.valor);
@@ -126,12 +152,15 @@ export default function Budget() {
         let totalOrcado = 0;
 
         // Organiza e processa as categorias em ordem alfabética
-        const categoriasProcessadas = categories
+        const categoriasProcessadas: CategoriaProcessada[] = categories
             .slice()
-            .sort((a, b) => a.nome.localeCompare(b.nome))
-            .map(cat => {
-                const limite = budgets[cat.nome] || 0;
-                const gasto = gastosReais[cat.nome] || 0;
+            .sort((a: any, b: any) => (a.nome || '').localeCompare(b.nome || ''))
+            .map((cat: any) => {
+                const catNome = cat.nome || 'Desconhecida';
+                const catCor = cat.cor || 'var(--farol-glow)';
+                const limite = budgets[catNome] || 0;
+                const gasto = gastosReais[catNome] || 0;
+                
                 totalOrcado += limite;
 
                 let percent = 0;
@@ -142,7 +171,14 @@ export default function Budget() {
                 if (percent > 75) progressColor = 'bg-warning';
                 if (percent > 100) progressColor = 'bg-danger';
 
-                return { ...cat, limite, gasto, percent, progressColor };
+                return { 
+                    nome: catNome, 
+                    cor: catCor, 
+                    limite, 
+                    gasto, 
+                    percent, 
+                    progressColor 
+                };
             });
 
         return { categoriasProcessadas, totalGasto, totalOrcado };
@@ -152,7 +188,9 @@ export default function Budget() {
     const saldoOrcamento = totalOrcado - totalGasto;
     const corSaldo = saldoOrcamento >= 0 ? 'success' : 'danger'; 
 
-    // 4. KPI Diário (Cálculo de dias restantes)
+    // ==========================================
+    // 4. KPI DIÁRIO (Cálculo de dias restantes)
+    // ==========================================
     const hoje = new Date();
     const [anoSel, mesSel] = selectedMonth.split('-');
     const isMesAtual = (parseInt(anoSel) === hoje.getFullYear() && parseInt(mesSel) === (hoje.getMonth() + 1));
@@ -173,29 +211,32 @@ export default function Budget() {
             textoDiario = "Orçamento Esgotado";
             classeDiaria = "danger";
         }
-    } else if (new Date(anoSel, mesSel - 1, 1) > hoje) {
+    } else if (new Date(parseInt(anoSel), parseInt(mesSel) - 1, 1) > hoje) {
         textoDiario = "Mês Futuro";
     }
 
     // ==========================================
-    // PREPARAÇÃO DE OPÇÕES PARA OS CUSTOM SELECTS
+    // PREPARAÇÃO DE OPÇÕES PARA OS SELECTS
     // ==========================================
-    const accountOptions = [
+    const accountOptions: SelectOption[] = [
         { value: 'all', label: '🏦 Todas as Contas' },
-        ...accounts.map(acc => ({ value: acc.id, label: acc.nome }))
+        ...accounts.map((acc: any) => ({ value: acc.id, label: acc.nome || acc.name }))
     ];
 
-    const monthOptions = availableMonths.map(mesIso => {
+    const monthOptions: SelectOption[] = availableMonths.map(mesIso => {
         const [ano, mes] = mesIso.split('-');
-        const dateObj = new Date(ano, mes - 1, 1);
+        const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
         const nome = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
         return { value: mesIso, label: nome.charAt(0).toUpperCase() + nome.slice(1) };
     });
 
+    // ==========================================
+    // RENDERIZAÇÃO
+    // ==========================================
     return (
         <div className="container mt-4 mb-5 fade-in pb-5">
             {/* HEADER TOOLBAR COM Z-100 */}
-            <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3 theme-surface p-3 shadow-sm position-relative z-100">
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3 theme-surface p-3 shadow-sm position-relative z-100 radius-12">
                 <div className="d-flex align-items-center gap-2">
                     <i className="bi bi-bullseye fs-4 text-warning"></i>
                     <h4 className="mb-0 fw-bold text-light">Metas do Mês</h4>
@@ -216,7 +257,7 @@ export default function Budget() {
                         
                         <div className="w-180 position-relative z-150">
                             <div className="h-100 mx-n1">
-                                <CustomSelect options={monthOptions} value={selectedMonth} onChange={(val) => handleMonthChange({ target: { value: val } })} className="h-100" textColor="text-light" />
+                                <CustomSelect options={monthOptions} value={selectedMonth} onChange={(val) => handleMonthChange(val)} className="h-100" textColor="text-light" />
                             </div>
                         </div>
 
@@ -225,7 +266,7 @@ export default function Budget() {
                 </div>
             </div>
 
-            {/* KPI CARDS (Os 4 cartões do topo com a classe radius-12) */}
+            {/* KPI CARDS */}
             <div className="row mb-4 g-3">
                 <div className="col-6 col-md-3">
                     <div className="theme-surface border-start border-4 border-secondary shadow-sm h-100 py-2 radius-12">
@@ -264,7 +305,7 @@ export default function Budget() {
             </div>
 
             {/* LISTA DE ORÇAMENTOS POR CATEGORIA */}
-            <div className="theme-surface shadow-sm mb-4">
+            <div className="theme-surface shadow-sm mb-4 radius-12">
                 <div className="card-header bg-transparent border-bottom border-secondary border-opacity-25 py-3 px-4 d-none d-md-block">
                     <div className="row align-items-center small text-uppercase text-muted fw-bold">
                         <div className="col-4">Categoria</div>
@@ -281,7 +322,7 @@ export default function Budget() {
                                 {/* ==== LAYOUT DESKTOP ==== */}
                                 <div className="row align-items-center d-none d-md-flex">
                                     <div className="col-4 d-flex align-items-center gap-3">
-                                        <div className="shadow-sm" style={{ width: '14px', height: '14px', backgroundColor: cat.cor || 'var(--farol-glow)', borderRadius: '50%', opacity: 0.8 }}></div>
+                                        <div className="shadow-sm" style={{ width: '14px', height: '14px', backgroundColor: cat.cor, borderRadius: '50%', opacity: 0.8 }}></div>
                                         <span className="fw-bold text-truncate fs-6" title={cat.nome}>{cat.nome}</span>
                                     </div>
                                     <div className="col-2">
@@ -292,7 +333,7 @@ export default function Budget() {
                                                 className="form-control form-control-sm text-center fw-bold"
                                                 value={cat.limite || ''}
                                                 placeholder="0"
-                                                onChange={(e) => handleLimitChange(cat.nome, e.target.value)}
+                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleLimitChange(cat.nome, e.target.value)}
                                             />
                                         </div>
                                     </div>
@@ -321,7 +362,7 @@ export default function Budget() {
                                 <div className="d-flex flex-column gap-3 w-100 d-md-none py-1">
                                     <div className="d-flex justify-content-between align-items-center">
                                         <div className="d-flex align-items-center gap-2 overflow-hidden">
-                                            <div style={{ width: '12px', height: '12px', backgroundColor: cat.cor || 'var(--farol-glow)', borderRadius: '50%', flexShrink: 0, opacity: 0.8 }}></div>
+                                            <div style={{ width: '12px', height: '12px', backgroundColor: cat.cor, borderRadius: '50%', flexShrink: 0, opacity: 0.8 }}></div>
                                             <span className="fw-bold text-truncate fs-6">{cat.nome}</span>
                                         </div>
                                         <div className="text-end">
@@ -342,7 +383,7 @@ export default function Budget() {
                                                 className="form-control form-control-sm text-center fw-bold py-0 text-xxs"
                                                 value={cat.limite || ''}
                                                 placeholder="0"
-                                                onChange={(e) => handleLimitChange(cat.nome, e.target.value)}
+                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleLimitChange(cat.nome, e.target.value)}
                                             />
                                         </div>
                                         <div className="small text-muted text-end text-xxs">

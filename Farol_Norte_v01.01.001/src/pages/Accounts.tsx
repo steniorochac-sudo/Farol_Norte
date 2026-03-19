@@ -1,29 +1,53 @@
-// src/pages/Accounts.jsx
+// src/pages/Accounts.tsx
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import { useFinance } from '../context/FinanceContext';
 import { accountsDb, cardsDb } from '../services/DataService';
+import { getBankOptions } from '../services/BankStrategies';
 import { formatCurrency } from '../utils/formatters';
-import CustomSelect from '../components/CustomSelect.jsx'; // 1. IMPORTANDO O COMPONENTE
+import CustomSelect, { SelectOption } from '../components/CustomSelect';
+import type { Account, CreditCard, BankType } from '../types/index';
+
+// =========================================================
+// INTERFACES LOCAIS (Estados dos Modais)
+// =========================================================
+interface ModalContaState {
+    show: boolean;
+    isEditing: boolean;
+    id: string | null;
+    nome: string;
+    saldoInicial: string | number;
+    bankType: string;
+}
+
+interface ModalCartaoState {
+    show: boolean;
+    isEditing: boolean;
+    id: string | null;
+    nome: string;
+    closingDay: string | number;
+    dueDay: string | number;
+    account_id: string;
+}
 
 export default function Accounts() {
     const { 
-            transactions = [], 
-            accounts = [], 
-            refreshData 
-        } = useFinance() || {};
+        transactions = [], 
+        accounts = [], 
+        refreshData = () => {} 
+    } = useFinance();
         
-    const chartRef = useRef(null);
-    const chartInstance = useRef(null);
+    const chartRef = useRef<HTMLCanvasElement | null>(null);
+    const chartInstance = useRef<Chart | null>(null);
 
     // ==========================================
     // ESTADOS DOS MODAIS
     // ==========================================
-    const [modalConta, setModalConta] = useState({ 
+    const [modalConta, setModalConta] = useState<ModalContaState>({ 
         show: false, isEditing: false, id: null, nome: '', saldoInicial: '', bankType: 'generic' 
     });
     
-    const [modalCartao, setModalCartao] = useState({ 
+    const [modalCartao, setModalCartao] = useState<ModalCartaoState>({ 
         show: false, isEditing: false, id: null, nome: '', closingDay: 5, dueDay: 12, account_id: '' 
     });
 
@@ -31,14 +55,16 @@ export default function Accounts() {
     // CÁLCULOS DE SALDO E PATRIMÔNIO
     // ==========================================
     const saldosMap = useMemo(() => {
-        const mapa = {};
-        accounts.forEach(c => {
-            mapa[c.id] = parseFloat(c.saldoInicial !== undefined ? c.saldoInicial : c.saldo) || 0;
+        const mapa: Record<string, number> = {};
+        accounts.forEach((c: Account) => {
+            const saldoIni = (c as any).saldoInicial;
+            const saldoAtu = (c as any).saldo;
+            mapa[c.id] = parseFloat(saldoIni !== undefined ? saldoIni : saldoAtu) || 0;
         });
 
-        transactions.forEach(t => {
+        transactions.forEach((t: any) => {
             if (t.tipoLancamento === 'conta' && mapa[t.account_id] !== undefined) {
-                mapa[t.account_id] += t.valor;
+                mapa[t.account_id] += (t.valor || 0);
             }
         });
         return mapa;
@@ -49,14 +75,14 @@ export default function Accounts() {
         Object.values(saldosMap).forEach(val => totalC += val);
 
         let saldoCard = 0;
-        transactions.forEach(t => {
+        transactions.forEach((t: any) => {
             if (t.tipoLancamento === 'cartao') {
                 if (t.valor < 0) {
                     saldoCard += t.valor;
                 } else {
                     if (t.tipo === 'Pagamento de Fatura') {
                         if (t.faturaLinks && Array.isArray(t.faturaLinks)) {
-                            saldoCard += t.faturaLinks.reduce((acc, link) => acc + link.valor, 0);
+                            saldoCard += t.faturaLinks.reduce((acc: number, link: any) => acc + link.valor, 0);
                         }
                     } else {
                         saldoCard += t.valor;
@@ -79,9 +105,9 @@ export default function Accounts() {
         if (!chartRef.current) return;
         if (chartInstance.current) chartInstance.current.destroy();
 
-        const labels = [];
-        const dadosReceitas = [];
-        const dadosDespesas = [];
+        const labels: string[] = [];
+        const dadosReceitas: number[] = [];
+        const dadosDespesas: number[] = [];
         const hoje = new Date();
 
         for (let i = 11; i >= 0; i--) {
@@ -96,7 +122,7 @@ export default function Accounts() {
             let receitaMes = 0;
             let despesaMes = 0;
 
-            transactions.forEach(t => {
+            transactions.forEach((t: any) => {
                 const parts = t.data?.split('/');
                 if(!parts || parts.length < 3) return;
                 const tChave = `${parts[2]}-${parts[1]}`;
@@ -136,7 +162,7 @@ export default function Accounts() {
                 },
                 plugins: {
                     legend: { position: 'top', labels: { color: '#E8EDF2' } },
-                    tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}` } }
+                    tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}` } }
                 }
             }
         });
@@ -149,22 +175,27 @@ export default function Accounts() {
     // ==========================================
     const salvarConta = () => {
         if (!modalConta.nome) return alert("Digite o nome da conta.");
-        const saldo = parseFloat(modalConta.saldoInicial) || 0;
+        const saldo = parseFloat(modalConta.saldoInicial.toString()) || 0;
 
-        if (modalConta.isEditing) {
-            accountsDb.update(modalConta.id, {
-                nome: modalConta.nome, bankType: modalConta.bankType, saldoInicial: saldo, saldo: saldo
-            });
+        const payload: any = {
+            nome: modalConta.nome, 
+            bank: modalConta.bankType as BankType,
+            saldoInicial: saldo, 
+            saldo: saldo,
+            status: 'active'
+        };
+
+        if (modalConta.isEditing && modalConta.id) {
+            accountsDb.update(modalConta.id, payload);
         } else {
-            accountsDb.add({
-                id: `acc-${Date.now()}`, nome: modalConta.nome, bankType: modalConta.bankType, saldoInicial: saldo, saldo: saldo, status: 'active'
-            });
+            payload.id = `acc-${Date.now()}`;
+            accountsDb.add(payload);
         }
         refreshData();
         setModalConta({ ...modalConta, show: false });
     };
 
-    const excluirConta = (id) => {
+    const excluirConta = (id: string) => {
         if(window.confirm("Tem certeza? Transações vinculadas a esta conta ficarão órfãs.")){
             accountsDb.delete(id);
             refreshData();
@@ -175,21 +206,26 @@ export default function Accounts() {
         if (!modalCartao.nome) return alert("Digite o nome do cartão.");
         if (!modalCartao.account_id) return alert("Selecione uma conta para vincular.");
 
-        const payload = {
-            nome: modalCartao.nome, closingDay: modalCartao.closingDay, 
-            dueDay: modalCartao.dueDay, account_id: modalCartao.account_id
+        const payload: any = {
+            nome: modalCartao.nome, 
+            closingDay: Number(modalCartao.closingDay), 
+            dueDay: Number(modalCartao.dueDay),
+            account_id: modalCartao.account_id,
+            bank: 'generic', 
+            status: 'active'
         };
 
-        if (modalCartao.isEditing) {
+        if (modalCartao.isEditing && modalCartao.id) {
             cardsDb.update(modalCartao.id, payload);
         } else {
-            cardsDb.add({ id: `card-${Date.now()}`, ...payload });
+            payload.id = `card-${Date.now()}`;
+            cardsDb.add(payload);
         }
         refreshData();
         setModalCartao({ ...modalCartao, show: false });
     };
 
-    const excluirCartao = (id) => {
+    const excluirCartao = (id: string) => {
         if(window.confirm("Remover este cartão?")){
             cardsDb.delete(id);
             refreshData();
@@ -201,17 +237,11 @@ export default function Accounts() {
     // ==========================================
     // OPÇÕES PARA OS SELECTS CUSTOMIZADOS
     // ==========================================
-    const bankOptions = [
-        { value: 'generic', label: 'Genérico (CSV Padrão)' },
-        { value: 'nubank', label: 'Nubank' },
-        { value: 'inter', label: 'Banco Inter' },
-        { value: 'itaú', label: 'Itaú' },
-        { value: 'bradesco', label: 'Bradesco' }
-    ];
+    const bankOptions: SelectOption[] = getBankOptions();
 
-    const accountOptions = [
+    const accountOptions: SelectOption[] = [
         { value: '', label: 'Selecione a conta...', disabled: true },
-        ...accounts.map(a => ({ value: a.id, label: a.nome }))
+        ...accounts.map((a: Account) => ({ value: a.id, label: a.nome }))
     ];
 
     return (
@@ -278,28 +308,35 @@ export default function Accounts() {
                         <div className="card-body p-0">
                             <div className="list-group list-group-flush bg-transparent">
                                 {accounts.length === 0 ? <div className="p-4 text-center text-muted">Nenhuma conta.</div> : 
-                                    accounts.map(c => (
-                                        <div key={c.id} className="list-group-item bg-transparent text-light border-bottom border-secondary border-opacity-25 px-4 py-3 d-flex justify-content-between align-items-center hover-opacity">
-                                            <div className="d-flex align-items-center gap-3">
-                                                <div className="fs-4 d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px' }}>
-                                                    {c.bankType === 'nubank' ? <span className="text-white p-1 rounded text-micro" style={{backgroundColor: '#8A05BE'}}>Nu</span> : 
-                                                     c.bankType === 'inter' ? <span className="text-dark bg-warning p-1 rounded fw-bold text-micro">Int</span> :
-                                                     c.bankType === 'itaú' ? <span className="text-white bg-primary p-1 rounded text-micro">Itaú</span> :
-                                                     <i className="bi bi-bank2 text-muted"></i>}
+                                    accounts.map((c: Account) => {
+                                        const cBank = c.bank;
+                                        const cName = c.nome;
+                                        const cIni = (c as any).saldoInicial;
+                                        const cSal = (c as any).saldo;
+
+                                        return (
+                                            <div key={c.id} className="list-group-item bg-transparent text-light border-bottom border-secondary border-opacity-25 px-4 py-3 d-flex justify-content-between align-items-center hover-opacity">
+                                                <div className="d-flex align-items-center gap-3">
+                                                    <div className="fs-4 d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px' }}>
+                                                        {cBank === 'nubank' ? <span className="text-white p-1 rounded text-micro" style={{backgroundColor: '#8A05BE'}}>Nu</span> : 
+                                                         cBank === 'inter' ? <span className="text-dark bg-warning p-1 rounded fw-bold text-micro">Int</span> :
+                                                         cBank === 'mercado_pago' ? <span className="text-white bg-info p-1 rounded fw-bold text-micro">MP</span> :
+                                                         <i className="bi bi-bank2 text-muted"></i>}
+                                                    </div>
+                                                    <div>
+                                                        <strong className="fs-6">{cName}</strong><br/>
+                                                        <small className={`fw-bold text-micro ${saldosMap[c.id] >= 0 ? 'text-success' : 'text-danger'}`}>
+                                                            Saldo: {formatCurrency(saldosMap[c.id])}
+                                                        </small>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <strong className="fs-6">{c.nome}</strong><br/>
-                                                    <small className={`fw-bold text-micro ${saldosMap[c.id] >= 0 ? 'text-success' : 'text-danger'}`}>
-                                                        Saldo: {formatCurrency(saldosMap[c.id])}
-                                                    </small>
+                                                <div className="btn-group">
+                                                    <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalConta({show: true, isEditing: true, id: c.id, nome: cName, bankType: cBank || 'generic', saldoInicial: cIni ?? cSal})}><i className="bi bi-pencil"></i></button>
+                                                    <button className="btn btn-sm btn-outline-danger border-0" onClick={() => excluirConta(c.id)}><i className="bi bi-trash"></i></button>
                                                 </div>
                                             </div>
-                                            <div className="btn-group">
-                                                <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalConta({show: true, isEditing: true, id: c.id, nome: c.nome, bankType: c.bankType || 'generic', saldoInicial: c.saldoInicial ?? c.saldo})}><i className="bi bi-pencil"></i></button>
-                                                <button className="btn btn-sm btn-outline-danger border-0" onClick={() => excluirConta(c.id)}><i className="bi bi-trash"></i></button>
-                                            </div>
-                                        </div>
-                                    ))
+                                        )
+                                    })
                                 }
                             </div>
                         </div>
@@ -318,19 +355,25 @@ export default function Accounts() {
                         <div className="card-body p-0">
                             <div className="list-group list-group-flush bg-transparent">
                                 {cartoes.length === 0 ? <div className="p-4 text-center text-muted">Nenhuma cartão.</div> :
-                                    cartoes.map(c => {
-                                        const cVinculada = accounts.find(a => a.id === c.account_id);
+                                    cartoes.map((c: CreditCard) => {
+                                        const cAccountId = c.account_id;
+                                        const cName = c.nome;
+                                        const cClosing = c.closingDay;
+                                        
+                                        const cVinculada = accounts.find((a: Account) => a.id === cAccountId);
+                                        const vincName = cVinculada ? cVinculada.nome : 'Desconhecida';
+                                        
                                         return (
                                             <div key={c.id} className="list-group-item bg-transparent text-light border-bottom border-secondary border-opacity-25 px-4 py-3 d-flex justify-content-between align-items-center hover-opacity">
                                                 <div>
-                                                    <strong className="fs-6 text-warning">{c.nome}</strong><br/>
-                                                    <small className="text-muted text-xxs">Débito: {cVinculada ? cVinculada.nome : 'Desconhecida'}</small><br/>
+                                                    <strong className="fs-6 text-warning">{cName}</strong><br/>
+                                                    <small className="text-muted text-xxs">Débito: {vincName}</small><br/>
                                                     <span className="badge bg-transparent border border-secondary border-opacity-50 text-muted mt-1 text-xxs">
-                                                        Fecha dia {c.closingDay} • Vence dia {c.dueDay}
+                                                        Fecha dia {cClosing} • Vence dia {c.dueDay}
                                                     </span>
                                                 </div>
                                                 <div className="btn-group">
-                                                    <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalCartao({ show: true, isEditing: true, ...c })}><i className="bi bi-pencil"></i></button>
+                                                    <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalCartao({ show: true, isEditing: true, id: c.id, nome: cName, closingDay: cClosing, dueDay: c.dueDay, account_id: cAccountId })}><i className="bi bi-pencil"></i></button>
                                                     <button className="btn btn-sm btn-outline-danger border-0" onClick={() => excluirCartao(c.id)}><i className="bi bi-trash"></i></button>
                                                 </div>
                                             </div>
@@ -347,8 +390,8 @@ export default function Accounts() {
             {/* MODAL CONTA */}
             {/* ========================================== */}
             {modalConta.show && (
-                <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1060}}>
-                    <div className="modal-dialog">
+                <div className="modal show d-block fade-in" style={{backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1060}}>
+                    <div className="modal-dialog modal-dialog-centered">
                         <div className="modal-content theme-surface shadow-lg">
                             <div className="modal-header border-bottom border-secondary border-opacity-25 px-4">
                                 <h5 className="modal-title fw-bold"><i className="bi bi-bank me-2 text-success"></i>{modalConta.isEditing ? 'Editar Conta' : 'Nova Conta'}</h5>
@@ -361,8 +404,6 @@ export default function Accounts() {
                                 </div>
                                 <div className="mb-3">
                                     <label className="form-label fw-bold text-muted small text-uppercase">Instituição (Para Importação)</label>
-                                    
-                                    {/* 2. APLICANDO O CUSTOM SELECT AQUI */}
                                     <div className="position-relative" style={{ zIndex: 105 }}>
                                         <CustomSelect 
                                             options={bankOptions} 
@@ -391,8 +432,8 @@ export default function Accounts() {
             {/* MODAL CARTÃO */}
             {/* ========================================== */}
             {modalCartao.show && (
-                <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1060}}>
-                    <div className="modal-dialog">
+                <div className="modal show d-block fade-in" style={{backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1060}}>
+                    <div className="modal-dialog modal-dialog-centered">
                         <div className="modal-content theme-surface shadow-lg">
                             <div className="modal-header border-bottom border-secondary border-opacity-25 px-4">
                                 <h5 className="modal-title fw-bold"><i className="bi bi-credit-card me-2 text-warning"></i>{modalCartao.isEditing ? 'Editar Cartão' : 'Novo Cartão'}</h5>
@@ -415,8 +456,6 @@ export default function Accounts() {
                                 </div>
                                 <div className="mb-3">
                                     <label className="form-label fw-bold text-muted small text-uppercase">Debitar da Conta</label>
-                                    
-                                    {/* 3. APLICANDO O CUSTOM SELECT AQUI */}
                                     <div className="position-relative" style={{ zIndex: 105 }}>
                                         <CustomSelect 
                                             options={accountOptions} 

@@ -1,4 +1,4 @@
-// src/pages/Settings.jsx
+// src/pages/Settings.tsx
 import React, { useState } from 'react';
 import { 
     exportarDados, 
@@ -9,12 +9,16 @@ import {
 } from '../services/DataService';
 
 export default function Settings() {
-    // Estados
-    const [fileToImport, setFileToImport] = useState(null);
-    const [showClearModal, setShowClearModal] = useState(false);
-    const [clearOption, setClearOption] = useState('transactions');
+    // ==========================================
+    // ESTADOS
+    // ==========================================
+    const [fileToImport, setFileToImport] = useState<File | null>(null);
+    const [showClearModal, setShowClearModal] = useState<boolean>(false);
+    const [clearOption, setClearOption] = useState<'transactions' | 'all'>('transactions');
 
-    // Manipuladores de Ação
+    // ==========================================
+    // MANIPULADORES DE AÇÃO
+    // ==========================================
     const handleExport = () => exportarDados();
 
     const handleImport = async () => {
@@ -24,7 +28,9 @@ export default function Settings() {
                 await importarDados(fileToImport);
                 alert("Backup restaurado! Recarregando sistema...");
                 window.location.reload();
-            } catch (e) { alert(e); }
+            } catch (e: any) { 
+                alert(e.message || "Erro ao importar dados"); 
+            }
         }
     };
 
@@ -40,6 +46,9 @@ export default function Settings() {
         window.location.reload();
     };
 
+    // ==========================================
+    // RENDERIZAÇÃO
+    // ==========================================
     return (
         <div className="container mt-4 mb-5 fade-in pb-5">
             <div className="row justify-content-center">
@@ -72,9 +81,9 @@ export default function Settings() {
                                     <div className="input-group">
                                         <input 
                                             type="file" 
-                                            className="form-control form-control-sm radius-left-8" 
+                                            className="form-control form-control-sm radius-left-8 text-light" 
                                             accept=".json"
-                                            onChange={(e) => setFileToImport(e.target.files[0])}
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFileToImport(e.target.files ? e.target.files[0] : null)}
                                         />
                                         <button className="btn btn-warning radius-right-8" type="button" onClick={handleImport} disabled={!fileToImport}>
                                             <i className="bi bi-upload text-dark"></i>
@@ -100,7 +109,7 @@ export default function Settings() {
                                         Exporta todas as transações (incluindo rateios) para Excel ou Google Sheets.
                                     </p>
                                 </div>
-                                <div className="min-w-180">
+                                <div style={{ minWidth: '180px' }}>
                                     <button className="btn btn-outline-success w-100 fw-bold" onClick={handleExportCSV}>
                                         <i className="bi bi-file-earmark-excel me-2"></i>Baixar Planilha
                                     </button>
@@ -124,7 +133,7 @@ export default function Settings() {
                                         Ações irreversíveis de exclusão de dados do navegador.
                                     </p>
                                 </div>
-                                <div className="min-w-180">
+                                <div style={{ minWidth: '180px' }}>
                                     <button className="btn btn-outline-danger w-100 fw-bold" onClick={() => setShowClearModal(true)}>
                                         <i className="bi bi-trash3-fill me-2"></i>Limpar Tudo...
                                     </button>
@@ -142,7 +151,7 @@ export default function Settings() {
 
             {/* MODAL DE LIMPEZA DE DADOS */}
             {showClearModal && (
-                <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 1060 }}>
+                <div className="modal show d-block fade-in" style={{ backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 1060 }}>
                     <div className="modal-dialog modal-dialog-centered">
                         <div className="modal-content theme-surface shadow-lg border-danger border-opacity-50">
                             <div className="modal-header border-bottom border-secondary border-opacity-25 px-4">
@@ -155,7 +164,7 @@ export default function Settings() {
                                 <div className="list-group bg-transparent">
                                     <label className={`list-group-item bg-transparent border border-secondary border-opacity-25 d-flex gap-3 align-items-start p-3 mb-2 rounded-3 cursor-pointer ${clearOption === 'transactions' ? 'border-warning bg-warning bg-opacity-10' : 'hover-opacity'}`}>
                                         <input 
-                                            className="form-check-input flex-shrink-0 mt-1 bg-transparent border-secondary" 
+                                            className="form-check-input flex-shrink-0 mt-1 bg-transparent border-secondary cursor-pointer" 
                                             type="radio" 
                                             name="clearOption" 
                                             checked={clearOption === 'transactions'} 
@@ -169,7 +178,7 @@ export default function Settings() {
                                     
                                     <label className={`list-group-item bg-transparent border border-danger border-opacity-25 d-flex gap-3 align-items-start p-3 rounded-3 cursor-pointer ${clearOption === 'all' ? 'bg-danger bg-opacity-10 border-opacity-100' : 'hover-opacity'}`}>
                                         <input 
-                                            className="form-check-input flex-shrink-0 mt-1 bg-transparent border-danger" 
+                                            className="form-check-input flex-shrink-0 mt-1 bg-transparent border-danger cursor-pointer" 
                                             type="radio" 
                                             name="clearOption" 
                                             checked={clearOption === 'all'} 

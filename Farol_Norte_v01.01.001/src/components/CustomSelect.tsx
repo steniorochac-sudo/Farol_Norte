@@ -23,7 +23,7 @@ export default function CustomSelect({
     options, 
     className = "", 
     textColor = "text-light" 
-}: CustomSelectProps): JSX.Element {
+}: CustomSelectProps) {
     const [isOpen, setIsOpen] = useState<boolean>(false);
     const [isDropUp, setIsDropUp] = useState<boolean>(false);
     const dropdownRef = useRef<HTMLDivElement>(null);

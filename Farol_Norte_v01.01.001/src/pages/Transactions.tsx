@@ -196,6 +196,9 @@ export default function Transactions() {
         const allT = db.getAll();
         allT.forEach(t => {
             if (selectedIds.has(t.identificador)) {
+                // NOVA TRAVA DE SEGURANÇA AQUI:
+                if (t.tipo === 'Pagamento de Fatura') return; 
+                
                 t.categoria = novaCategoria;
                 delete t.split;
             }
@@ -430,6 +433,7 @@ export default function Transactions() {
 // =========================================================
 function TransactionEditModal({ transaction, onClose, accounts, categories, refreshData }: TransactionEditModalProps) {
     const isNew = !transaction;
+    const isFatura = !isNew && transaction?.tipo === 'Pagamento de Fatura';
 
     const [desc, setDesc] = useState<string>(isNew ? '' : (transaction?.nome || ''));
     const [valorVisual, setValorVisual] = useState<string>(isNew ? '' : Math.abs(transaction?.valor || 0).toString());
@@ -555,17 +559,18 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 
                             <hr className="border-secondary border-opacity-25 my-4" />
 
-                            <div className="form-check form-switch mb-4">
-                                <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSplit} onChange={e => setIsSplit(e.target.checked)} style={{cursor: 'pointer'}} />
-                                <label className="form-check-label fw-bold text-light" style={{cursor: 'pointer'}}><i className="bi bi-pie-chart-fill text-warning me-2"></i>Dividir em Múltiplas Categorias (Rateio)</label>
+                            <div className="form-check form-switch mb-4" style={{ opacity: isFatura ? 0.5 : 1 }}>
+                                <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSplit} onChange={e => !isFatura && setIsSplit(e.target.checked)} disabled={isFatura} style={{cursor: isFatura ? 'not-allowed' : 'pointer'}} />
+                                <label className="form-check-label fw-bold text-light" style={{cursor: isFatura ? 'not-allowed' : 'pointer'}}><i className="bi bi-pie-chart-fill text-warning me-2"></i>Dividir em Múltiplas Categorias (Rateio)</label>
                             </div>
 
                             {!isSplit ? (
                                 <div className="mb-3 bg-white theme-surface bg-opacity-5 p-4 rounded-4 border border-secondary border-opacity-25">
                                     <label className="form-label fw-bold text-muted small text-uppercase">Classificação</label>
-                                    <div style={{ position: 'relative', zIndex: 104 }}>
+                                    <div style={{ pointerEvents: isFatura ? 'none' : 'auto', opacity: isFatura ? 0.5 : 1, position: 'relative', zIndex: 104 }}>
                                         <CustomSelect options={categoryOptions} value={singleCategory || 'Não classificada'} onChange={val => setSingleCategory(val)} textColor="text-light" />
                                     </div>
+                                    {isFatura && <small className="text-info d-block mt-2 text-xxs"><i className="bi bi-lock-fill me-1"></i>A categoria de um pagamento de fatura é fixa.</small>}
                                 </div>
                             ) : (
                                 <div className="bg-white bg-opacity-5 theme-surface p-4 rounded-4 border border-warning border-opacity-50">
@@ -617,6 +622,9 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }: MassS
 
         allT.forEach(t => {
             if (selectedIds.has(t.identificador)) {
+                // TRAVA AQUI: Exatamente onde a transação 't' está a ser lida
+                if (t.tipo === 'Pagamento de Fatura') return;
+
                 const valorTotal = t.valor; 
                 const novosSplits = [];
                 let somaParcial = 0;
