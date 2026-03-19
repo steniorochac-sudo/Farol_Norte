@@ -40,303 +40,225 @@ function AppContent(): JSX.Element {
   }
 
   return (
-    <div className="d-flex flex-column h-100 w-100" style={{ background: 'transparent' }}>
-      {/* Novo fundo figurativo animado */}
-      <Background />
+    <div className="d-flex flex-column h-100 position-relative z-10">
+      
+      {/* HEADER MOBILE (Apenas telas pequenas) */}
+      <div className="d-md-none theme-surface border-bottom border-secondary border-opacity-25 px-4 py-3 d-flex justify-content-between align-items-center shadow-sm position-sticky top-0" style={{ zIndex: 1040 }}>
+        <div className="d-flex align-items-center gap-2">
+          <i className="bi bi-compass-fill fs-3 text-warning"></i>
+          <h5 className="mb-0 fw-bold text-light ls-1">{getPageTitle()}</h5>
+        </div>
+        <div className="rounded-circle overflow-hidden border border-2 border-warning shadow-sm" style={{ width: '40px', height: '40px' }}>
+          <img src="https://ui-avatars.com/api/?name=Stenio+Rocha&background=F2B705&color=1C2331&bold=true" alt="Perfil" className="w-100 h-100 object-fit-cover" />
+        </div>
+      </div>
 
-      {/* HEADER DESKTOP PREMIUM */}
-      <nav
-        className="navbar navbar-expand-md shadow-sm d-none d-md-flex flex-shrink-0 theme-surface border-bottom border-secondary border-opacity-25"
-        style={{ borderRadius: 0, height: '70px' }}
-      >
-        <div className="container h-100">
-          <span className="navbar-brand fw-bold text-light fs-4 d-flex align-items-center h-100">
-            <i
-              className="bi bi-brightness-high-fill me-2 text-warning"
-              style={{ filter: 'drop-shadow(0 0 8px rgba(242,183,5,0.6))' }}
-            ></i>
-            Farol Norte
-          </span>
-          <div className="d-flex gap-4 align-items-center h-100">
-            <NavLink
-              to="/"
-              className={({ isActive }) =>
-                `text-decoration-none nav-link-desktop ${
-                  isActive
-                    ? 'text-warning fw-bold active'
-                    : 'text-light opacity-75 hover-opacity'
-                }`
-              }
-            >
+      <div className="d-flex flex-grow-1 overflow-hidden">
+        
+        {/* === SIDEBAR DESKTOP === */}
+        <div className="d-none d-md-flex flex-column theme-surface h-100 border-end border-secondary border-opacity-25 shadow-lg position-relative z-100" style={{ width: '280px', transition: 'all 0.3s ease' }}>
+          <div className="p-4 d-flex align-items-center gap-3 border-bottom border-secondary border-opacity-25">
+            <i className="bi bi-compass-fill fs-1 text-warning drop-shadow-warning"></i>
+            <div>
+              <h4 className="mb-0 fw-bold text-light ls-1">FAROL NORTE</h4>
+              <small className="text-warning text-micro fw-bold text-uppercase tracking-wider">React Edition</small>
+            </div>
+          </div>
+
+          <div className="p-4 border-bottom border-secondary border-opacity-25 d-flex align-items-center gap-3">
+             <div className="rounded-circle overflow-hidden border border-2 border-warning shadow-sm" style={{ width: '48px', height: '48px' }}>
+               <img src="https://ui-avatars.com/api/?name=Stenio+Rocha&background=F2B705&color=1C2331&bold=true" alt="Perfil" className="w-100 h-100 object-fit-cover" />
+             </div>
+             <div>
+               <div className="fw-bold text-light">Stenio Rocha</div>
+               <div className="text-success text-micro fw-bold d-flex align-items-center gap-1">
+                 <span className="p-1 bg-success rounded-circle"></span> Online
+               </div>
+             </div>
+          </div>
+
+          <nav className="flex-grow-1 overflow-auto p-3 scrollable-menu">
+            <div className="text-muted text-micro fw-bold text-uppercase mb-3 px-3 ls-1">Visão Geral</div>
+            
+            <NavLink to="/" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
+              <div className={`rounded-circle d-flex align-items-center justify-content-center me-3 ${location.pathname === '/' ? 'bg-dark bg-opacity-10' : 'bg-white bg-opacity-10'}`} style={{ width: '36px', height: '36px' }}>
+                <i className="bi bi-speedometer2 fs-5"></i>
+              </div>
               Dashboard
             </NavLink>
-            <NavLink
-              to="/transacoes"
-              className={({ isActive }) =>
-                `text-decoration-none nav-link-desktop ${
-                  isActive
-                    ? 'text-warning fw-bold active'
-                    : 'text-light opacity-75 hover-opacity'
-                }`
-              }
-            >
+
+            <NavLink to="/transacoes" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
+              <div className={`rounded-circle d-flex align-items-center justify-content-center me-3 ${location.pathname === '/transacoes' ? 'bg-dark bg-opacity-10' : 'bg-white bg-opacity-10'}`} style={{ width: '36px', height: '36px' }}>
+                <i className="bi bi-arrow-left-right fs-5"></i>
+              </div>
               Transações
             </NavLink>
-            <NavLink
-              to="/contas"
-              className={({ isActive }) =>
-                `text-decoration-none nav-link-desktop ${
-                  isActive
-                    ? 'text-warning fw-bold active'
-                    : 'text-light opacity-75 hover-opacity'
-                }`
-              }
-            >
+
+            <div className="text-muted text-micro fw-bold text-uppercase mb-3 mt-4 px-3 ls-1">Gestão</div>
+
+            <NavLink to="/contas" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
+              <div className={`rounded-circle d-flex align-items-center justify-content-center me-3 ${location.pathname === '/contas' ? 'bg-dark bg-opacity-10' : 'bg-white bg-opacity-10'}`} style={{ width: '36px', height: '36px' }}>
+                <i className="bi bi-bank2 fs-5"></i>
+              </div>
               Contas
             </NavLink>
-            <NavLink
-              to="/cartoes"
-              className={({ isActive }) =>
-                `text-decoration-none nav-link-desktop ${
-                  isActive
-                    ? 'text-warning fw-bold active'
-                    : 'text-light opacity-75 hover-opacity'
-                }`
-              }
-            >
+
+            <NavLink to="/cartoes" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
+              <div className={`rounded-circle d-flex align-items-center justify-content-center me-3 ${location.pathname === '/cartoes' ? 'bg-dark bg-opacity-10' : 'bg-white bg-opacity-10'}`} style={{ width: '36px', height: '36px' }}>
+                <i className="bi bi-credit-card-2-front fs-5"></i>
+              </div>
               Cartões
             </NavLink>
-            <NavLink
-              to="/orcamentos"
-              className={({ isActive }) =>
-                `text-decoration-none nav-link-desktop ${
-                  isActive
-                    ? 'text-warning fw-bold active'
-                    : 'text-light opacity-75 hover-opacity'
-                }`
-              }
-            >
-              Metas
+
+            <NavLink to="/orcamentos" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
+              <div className={`rounded-circle d-flex align-items-center justify-content-center me-3 ${location.pathname === '/orcamentos' ? 'bg-dark bg-opacity-10' : 'bg-white bg-opacity-10'}`} style={{ width: '36px', height: '36px' }}>
+                <i className="bi bi-bullseye fs-5"></i>
+              </div>
+              Orçamentos
             </NavLink>
-            <NavLink
-              to="/dre"
-              className={({ isActive }) =>
-                `text-decoration-none nav-link-desktop ${
-                  isActive
-                    ? 'text-warning fw-bold active'
-                    : 'text-light opacity-75 hover-opacity'
-                }`
-              }
-            >
-              DRE
+
+            <NavLink to="/dre" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
+              <div className={`rounded-circle d-flex align-items-center justify-content-center me-3 ${location.pathname === '/dre' ? 'bg-dark bg-opacity-10' : 'bg-white bg-opacity-10'}`} style={{ width: '36px', height: '36px' }}>
+                <i className="bi bi-funnel-fill fs-5"></i>
+              </div>
+              DRE Pessoal
             </NavLink>
-            <NavLink
-              to="/categorias"
-              className={({ isActive }) =>
-                `text-decoration-none nav-link-desktop ${
-                  isActive
-                    ? 'text-warning fw-bold active'
-                    : 'text-light opacity-75 hover-opacity'
-                }`
-              }
-            >
+
+            <div className="text-muted text-micro fw-bold text-uppercase mb-3 mt-4 px-3 ls-1">Sistema</div>
+
+            <NavLink to="/categorias" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
+              <div className={`rounded-circle d-flex align-items-center justify-content-center me-3 ${location.pathname === '/categorias' ? 'bg-dark bg-opacity-10' : 'bg-white bg-opacity-10'}`} style={{ width: '36px', height: '36px' }}>
+                <i className="bi bi-robot fs-5 text-info"></i>
+              </div>
               Categorias
             </NavLink>
-            <NavLink
-              to="/configuracoes"
-              className={({ isActive }) =>
-                `text-decoration-none nav-link-desktop ms-2 ${
-                  isActive
-                    ? 'text-warning fw-bold active'
-                    : 'text-light opacity-75 hover-opacity'
-                }`
-              }
-            >
-              <i className="bi bi-gear-fill fs-5"></i>
+
+            <NavLink to="/configuracoes" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-danger text-white fw-bold shadow-sm' : 'text-danger hover-opacity'}`}>
+              <div className={`rounded-circle d-flex align-items-center justify-content-center me-3 ${location.pathname === '/configuracoes' ? 'bg-dark bg-opacity-10' : 'bg-danger bg-opacity-10 border border-danger border-opacity-25'}`} style={{ width: '36px', height: '36px' }}>
+                <i className="bi bi-gear-fill fs-5"></i>
+              </div>
+              Configurações
             </NavLink>
+
+          </nav>
+        </div>
+
+        {/* ÁREA PRINCIPAL (ONDE AS PÁGINAS RENDERIZAM) */}
+        <div className="flex-grow-1 overflow-auto position-relative z-1" id="main-scroll-area">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/transacoes" element={<Transactions />} />
+            <Route path="/contas" element={<Accounts />} />
+            <Route path="/cartoes" element={<CreditCards />} />
+            <Route path="/categorias" element={<Categories />} />
+            <Route path="/orcamentos" element={<Budget />} />
+            <Route path="/dre" element={<Dre />} />
+            <Route path="/configuracoes" element={<Settings />} />
+          </Routes>
+        </div>
+
+      </div>
+
+      {/* === BOTTOM NAV MOBILE === */}
+      <div className="d-md-none position-fixed bottom-0 w-100 theme-surface border-top border-secondary border-opacity-50 d-flex justify-content-around align-items-center pb-2 pt-2 px-1" style={{ zIndex: 1050, height: '70px' }}>
+        
+        <NavLink to="/" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
+          <i className="bi bi-speedometer2 fs-4 mb-1 line-height-1"></i>
+          <span className="text-micro">Painel</span>
+        </NavLink>
+        
+        <NavLink to="/transacoes" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
+          <i className="bi bi-arrow-left-right fs-4 mb-1 line-height-1"></i>
+          <span className="text-micro">Trans.</span>
+        </NavLink>
+
+        <NavLink to="/dre" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
+          <i className="bi bi-funnel-fill fs-4 mb-1 line-height-1"></i>
+          <span className="text-micro">DRE</span>
+        </NavLink>
+
+        <div className="nav-link d-flex flex-column align-items-center justify-content-center position-relative" style={{ minWidth: '60px', marginTop: '-30px' }} onClick={() => setIsMenuOpen(true)}>
+          <div className="bg-warning text-dark rounded-circle d-flex align-items-center justify-content-center shadow-lg" style={{ width: '56px', height: '56px', border: '4px solid var(--farol-bg)' }}>
+            <i className="bi bi-list fs-1"></i>
           </div>
         </div>
-      </nav>
 
-      {/* HEADER MOBILE */}
-      <header
-        className="theme-surface text-light p-3 shadow-sm d-md-none d-flex justify-content-center align-items-center flex-shrink-0 z-3 border-bottom border-secondary border-opacity-25"
-        style={{ borderRadius: 0 }}
-      >
-        <span className="fw-bold fs-5 tracking-wide">{getPageTitle()}</span>
-      </header>
-
-      {/* ÁREA DE CONTEÚDO */}
-      <main
-        className="container-fluid container-md py-3 flex-grow-1 overflow-y-auto"
-        style={{ background: 'transparent' }}
-      >
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/transacoes" element={<Transactions />} />
-          <Route path="/contas" element={<Accounts />} />
-          <Route path="/cartoes" element={<CreditCards />} />
-          <Route path="/categorias" element={<Categories />} />
-          <Route path="/orcamentos" element={<Budget />} />
-          <Route path="/configuracoes" element={<Settings />} />
-          <Route path="/dre" element={<Dre />} />
-        </Routes>
-      </main>
-
-      {/* BOTTOM NAVIGATION BAR MOBILE */}
-      <nav
-        className="glass-nav d-flex justify-content-around align-items-center d-md-none shadow-lg flex-shrink-0"
-        style={{ height: '70px', zIndex: 1040, paddingBottom: '5px' }}
-      >
-        <NavLink
-          to="/"
-          onClick={closeMenu}
-          className={({ isActive }) =>
-            `d-flex flex-column align-items-center justify-content-center text-decoration-none w-100 h-100 ${
-              isActive && !isMenuOpen
-                ? 'mobile-nav-active fw-bold'
-                : 'text-white-50'
-            }`
-          }
-        >
-          <i
-            className="bi bi-house-door-fill fs-4 mb-1"
-            style={{ lineHeight: 1 }}
-          ></i>
-          <span style={{ fontSize: '0.65rem' }}>Início</span>
+        <NavLink to="/contas" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
+          <i className="bi bi-bank2 fs-4 mb-1 line-height-1"></i>
+          <span className="text-micro">Contas</span>
         </NavLink>
 
-        <NavLink
-          to="/transacoes"
-          onClick={closeMenu}
-          className={({ isActive }) =>
-            `d-flex flex-column align-items-center justify-content-center text-decoration-none w-100 h-100 ${
-              isActive && !isMenuOpen
-                ? 'mobile-nav-active fw-bold'
-                : 'text-white-50'
-            }`
-          }
-        >
-          <i
-            className="bi bi-arrow-left-right fs-4 mb-1"
-            style={{ lineHeight: 1 }}
-          ></i>
-          <span style={{ fontSize: '0.65rem' }}>Extrato</span>
+        <NavLink to="/cartoes" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
+          <i className="bi bi-credit-card-2-front fs-4 mb-1 line-height-1"></i>
+          <span className="text-micro">Cartões</span>
         </NavLink>
 
-        <NavLink
-          to="/contas"
-          onClick={closeMenu}
-          className={({ isActive }) =>
-            `d-flex flex-column align-items-center justify-content-center text-decoration-none w-100 h-100 ${
-              isActive && !isMenuOpen
-                ? 'mobile-nav-active fw-bold'
-                : 'text-white-50'
-            }`
-          }
-        >
-          <i
-            className="bi bi-bank2 fs-4 mb-1"
-            style={{ lineHeight: 1 }}
-          ></i>
-          <span style={{ fontSize: '0.65rem' }}>Contas</span>
-        </NavLink>
+      </div>
 
-        <NavLink
-          to="/orcamentos"
-          onClick={closeMenu}
-          className={({ isActive }) =>
-            `d-flex flex-column align-items-center justify-content-center text-decoration-none w-100 h-100 ${
-              isActive && !isMenuOpen
-                ? 'mobile-nav-active fw-bold'
-                : 'text-white-50'
-            }`
-          }
-        >
-          <i
-            className="bi bi-bullseye fs-4 mb-1"
-            style={{ lineHeight: 1 }}
-          ></i>
-          <span style={{ fontSize: '0.65rem' }}>Metas</span>
-        </NavLink>
-
-        <div
-          className={`d-flex flex-column align-items-center justify-content-center text-decoration-none w-100 h-100 cursor-pointer ${
-            isMenuOpen ? 'mobile-nav-active fw-bold' : 'text-white-50'
-          }`}
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-        >
-          <i
-            className="bi bi-grid-fill fs-4 mb-1"
-            style={{ lineHeight: 1 }}
-          ></i>
-          <span style={{ fontSize: '0.65rem' }}>Menu</span>
-        </div>
-      </nav>
-
-      {/* OVERLAY DE MENU MOBILE */}
+      {/* === OFFCANVAS MENU MOBILE === */}
       {isMenuOpen && (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100 theme-surface d-md-none fade-in d-flex flex-column"
-          style={{ zIndex: 1050, borderRadius: 0 }}
-        >
-          <div className="border-bottom border-secondary border-opacity-25 text-light p-3 shadow-sm d-flex justify-content-between align-items-center flex-shrink-0">
-            <span className="fw-bold fs-5">Menu</span>
-            <button
-              className="btn btn-sm btn-outline-light border-0"
-              onClick={closeMenu}
-            >
-              <i className="bi bi-x-lg fs-5"></i>
-            </button>
-          </div>
-          <div className="p-4 flex-grow-1 overflow-y-auto">
-            <div className="list-group list-group-flush border-top border-bottom border-secondary border-opacity-25 bg-transparent">
-              <Link
-                to="/cartoes"
-                onClick={closeMenu}
-                className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity"
-              >
-                <div
-                  className="rounded-circle d-flex align-items-center justify-content-center me-3 shadow-sm"
-                  style={{
-                    width: '40px',
-                    height: '40px',
-                    backgroundColor: 'rgba(255,255,255,0.05)',
-                  }}
-                >
-                  <i className="bi bi-credit-card text-warning fs-5"></i>
+        <div className="d-md-none position-fixed top-0 start-0 w-100 h-100 fade-in" style={{ zIndex: 1060 }}>
+          <div className="position-absolute top-0 start-0 w-100 h-100 bg-black bg-opacity-75 backdrop-blur" onClick={closeMenu}></div>
+          <div className="position-absolute bottom-0 start-0 w-100 theme-surface radius-top-24 slide-up overflow-hidden" style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            
+            <div className="p-4 border-bottom border-secondary border-opacity-25 d-flex justify-content-between align-items-center bg-white bg-opacity-5">
+              <div className="d-flex align-items-center gap-3">
+                <i className="bi bi-compass-fill fs-1 text-warning drop-shadow-warning"></i>
+                <div>
+                  <h4 className="mb-0 fw-bold text-light ls-1">FAROL NORTE</h4>
+                  <small className="text-warning text-micro fw-bold text-uppercase tracking-wider">Menu Principal</small>
                 </div>
-                Meus Cartões de Crédito
+              </div>
+              <button className="btn btn-outline-light border-0 rounded-circle" onClick={closeMenu} style={{ width: '40px', height: '40px' }}>
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div className="list-group list-group-flush overflow-auto">
+              <Link to="/" onClick={closeMenu} className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity">
+                <div className="rounded-circle bg-white bg-opacity-10 d-flex align-items-center justify-content-center me-3 shadow-sm" style={{ width: '40px', height: '40px' }}>
+                  <i className="bi bi-speedometer2 text-warning fs-5"></i>
+                </div>
+                Dashboard Resumo
               </Link>
-              <Link
-                to="/categorias"
-                onClick={closeMenu}
-                className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity"
-              >
-                <div
-                  className="rounded-circle d-flex align-items-center justify-content-center me-3 shadow-sm"
-                  style={{
-                    width: '40px',
-                    height: '40px',
-                    backgroundColor: 'rgba(255,255,255,0.05)',
-                  }}
-                >
+              <Link to="/transacoes" onClick={closeMenu} className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity">
+                <div className="rounded-circle bg-white bg-opacity-10 d-flex align-items-center justify-content-center me-3 shadow-sm" style={{ width: '40px', height: '40px' }}>
+                  <i className="bi bi-arrow-left-right text-warning fs-5"></i>
+                </div>
+                Gestão de Transações
+              </Link>
+              <Link to="/contas" onClick={closeMenu} className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity">
+                <div className="rounded-circle bg-white bg-opacity-10 d-flex align-items-center justify-content-center me-3 shadow-sm" style={{ width: '40px', height: '40px' }}>
+                  <i className="bi bi-bank2 text-warning fs-5"></i>
+                </div>
+                Minhas Contas
+              </Link>
+              <Link to="/cartoes" onClick={closeMenu} className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity">
+                <div className="rounded-circle bg-white bg-opacity-10 d-flex align-items-center justify-content-center me-3 shadow-sm" style={{ width: '40px', height: '40px' }}>
+                  <i className="bi bi-credit-card-2-front text-warning fs-5"></i>
+                </div>
+                Meus Cartões
+              </Link>
+              <Link to="/orcamentos" onClick={closeMenu} className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity">
+                <div className="rounded-circle bg-white bg-opacity-10 d-flex align-items-center justify-content-center me-3 shadow-sm" style={{ width: '40px', height: '40px' }}>
+                  <i className="bi bi-bullseye text-warning fs-5"></i>
+                </div>
+                Metas & Orçamentos
+              </Link>
+              <Link to="/dre" onClick={closeMenu} className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity">
+                <div className="rounded-circle bg-white bg-opacity-10 d-flex align-items-center justify-content-center me-3 shadow-sm" style={{ width: '40px', height: '40px' }}>
+                  <i className="bi bi-funnel-fill text-warning fs-5"></i>
+                </div>
+                DRE Pessoal
+              </Link>
+              <Link to="/categorias" onClick={closeMenu} className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-light hover-opacity">
+                <div className="rounded-circle d-flex align-items-center justify-content-center me-3 shadow-sm" style={{ width: '40px', height: '40px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
                   <i className="bi bi-robot text-info fs-5"></i>
                 </div>
                 Categorias & Automações
               </Link>
-              <Link
-                to="/configuracoes"
-                onClick={closeMenu}
-                className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-danger hover-opacity"
-              >
-                <div
-                  className="rounded-circle bg-danger bg-opacity-10 border border-danger border-opacity-25 d-flex align-items-center justify-content-center me-3 shadow-sm"
-                  style={{
-                    width: '40px',
-                    height: '40px',
-                  }}
-                >
+              <Link to="/configuracoes" onClick={closeMenu} className="list-group-item bg-transparent border-secondary border-opacity-25 list-group-item-action py-4 fs-6 d-flex align-items-center fw-bold text-danger hover-opacity">
+                <div className="rounded-circle bg-danger bg-opacity-10 border border-danger border-opacity-25 d-flex align-items-center justify-content-center me-3 shadow-sm" style={{ width: '40px', height: '40px' }}>
                   <i className="bi bi-gear-fill text-danger fs-5"></i>
                 </div>
                 Configurações do Sistema
@@ -352,7 +274,9 @@ function AppContent(): JSX.Element {
 export default function App(): JSX.Element {
   return (
     <BrowserRouter>
-      <AppContent />
+      <Background>
+        <AppContent />
+      </Background>
     </BrowserRouter>
   )
 }
