@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { formatCurrency } from '../utils/formatters';
 import { parseDateBR, generateUUID } from '../utils/helpers';
-import { db } from '../services/DataService';
+import { db, cardsDb } from '../services/DataService';
 import ImportModal from '../components/ImportModal'; // Assumindo que ainda está em .jsx ou já migrado
 import CustomSelect, { SelectOption } from '../components/CustomSelect';
 import type { Transaction, Account, Category } from '../types/index';
@@ -208,6 +208,27 @@ export default function Transactions() {
         setSelectedIds(new Set());
     };
 
+    const handleQuickPay = (t: Transaction, e: React.MouseEvent) => {
+        e.stopPropagation(); // Impede de abrir o modal de edição ao clicar no botão
+        
+        const hojeIso = new Date().toISOString().split('T')[0];
+        const [y, m, d] = hojeIso.split('-');
+        const dataHojeBR = `${d}/${m}/${y}`;
+
+        const allT = db.getAll();
+        const idx = allT.findIndex(item => item.identificador === t.identificador);
+        
+        if (idx > -1) {
+            allT[idx] = {
+                ...allT[idx],
+                dataPagamento: dataHojeBR,
+                status: 'pago'
+            };
+            db.save(allT);
+            refreshData();
+        }
+    };
+
     // ==========================================
     // PREPARAÇÃO DE OPÇÕES PARA OS CUSTOM SELECTS
     // ==========================================
@@ -342,6 +363,8 @@ export default function Transactions() {
                                 if (part) { valorDisplay = part.valor; isPartial = true; }
                             }
 
+                            
+
                             const isSelected = selectedIds.has(t.identificador);
                             const isPositive = valorDisplay >= 0;
                             const isPagamento = t.tipo === 'Pagamento de Fatura';
@@ -409,6 +432,7 @@ export default function Transactions() {
                                                 <span style={{ fontSize: '0.75rem' }}>{vencText}</span>
                                             </span>
 
+                                            {/* BADGES DE CATEGORIA */}
                                             <div className="d-flex gap-1 overflow-hidden" style={{ flex: 1 }}>
                                                 {t.split && t.split.length > 0 ? (
                                                     t.split.map((p, idx) => (
@@ -423,7 +447,21 @@ export default function Transactions() {
                                                 )}
                                             </div>
 
+                                            {/* === INDICADORES DE STATUS E QUICK PAY === */}
                                             {isPagamento && <span className="badge bg-info bg-opacity-25 text-info border border-info border-opacity-50 ms-2 flex-shrink-0" style={{ fontSize: '0.7rem' }}>Pagamento</span>}
+                                            
+                                            {!isUnpaid ? (
+                                                <span className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50 ms-2 flex-shrink-0" style={{ fontSize: '0.7rem' }}><i className="bi bi-check2-all me-1"></i>Pago</span>
+                                            ) : (
+                                                ((t as any).tipoLancamento === 'cartao' || t.card_id) ? (
+                                                    <span className="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-50 ms-2 flex-shrink-0" style={{ fontSize: '0.7rem' }}>Na Fatura</span>
+                                                ) : (
+                                                    <button className="btn btn-sm btn-outline-success py-0 px-2 ms-2 rounded-pill flex-shrink-0 d-flex align-items-center gap-1" style={{ fontSize: '0.7rem' }} onClick={(e) => handleQuickPay(t, e)}>
+                                                        <i className="bi bi-check-circle"></i> Pagar
+                                                    </button>
+                                                )
+                                            )}
+                                            
                                         </div>
                                     </div>
                                     <button className="btn btn-sm btn-outline-secondary border-0 text-white-50 d-none d-md-block flex-shrink-0" onClick={() => setModalEdit({ show: true, transaction: t })}><i className="bi bi-pencil"></i></button>
@@ -482,7 +520,7 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
         return `${y}-${m}-${d}`;
     });
 
-    // Novos campos de data de vencimento, e de pagamento
+    // Novos campos de data de vencimento e pagamento
     const [dataVencimentoIso, setDataVencimentoIso] = useState<string>(() => {
         if (isNew || !transaction?.dataVencimento) return new Date().toISOString().split('T')[0];
         const [d, m, y] = transaction.dataVencimento.split('/');
@@ -501,8 +539,41 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
     const [isSplit, setIsSplit] = useState<boolean>(!isNew && !!transaction?.split && transaction.split.length > 0);
     const [singleCategory, setSingleCategory] = useState<string>(isNew ? 'Não classificada' : (transaction?.categoria || 'Não classificada'));
     
-    // Tipagem da fatia de rateio
     const [splits, setSplits] = useState<SplitItem[]>(!isNew && transaction?.split ? transaction.split.map(s => ({ ...s, valor: Math.abs(s.valor || 0) })) : []);
+
+    // AUTO-CÁLCULO DE VENCIMENTO
+    useEffect(() => {
+        const cards = cardsDb.getAll();
+        const selectedCard = cards.find(c => c.id === accountId || c.id === (transaction as any)?.card_id);
+
+        if (selectedCard) {
+            // É um cartão! Calcula a fatura
+            const [y, m, d] = dataIso.split('-');
+            const diaCompra = parseInt(d, 10);
+            let mesFatura = parseInt(m, 10);
+            let anoFatura = parseInt(y, 10);
+
+            if (diaCompra >= selectedCard.closingDay) {
+                mesFatura += 1;
+                if (mesFatura > 12) {
+                    mesFatura = 1;
+                    anoFatura += 1;
+                }
+            }
+            
+            const vencIso = `${anoFatura}-${String(mesFatura).padStart(2, '0')}-${String(selectedCard.dueDay).padStart(2, '0')}`;
+            setDataVencimentoIso(vencIso);
+            
+            // Se for nova compra no cartão, o pagamento nasce vazio (pendente)
+            if (isNew) setDataPagamentoIso(''); 
+
+        } else if (isNew) {
+            // É conta corrente! Vence e paga na hora no mesmo dia da compra.
+            setDataVencimentoIso(dataIso);
+            setDataPagamentoIso(dataIso);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dataIso, accountId, isNew]);
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
@@ -523,8 +594,7 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
             dataPagamentoBR = `${pD}/${pM}/${pY}`;
         }
 
-        // Casting temporário devido a atributos flexíveis não declarados estritamente
-        let finalTransaction: Transaction = { // Agora o TS reconhece!
+        let finalTransaction: Transaction = {
             identificador: isNew ? `manual-${generateUUID()}` : transaction?.identificador || '',
             data: dataBR,
             dataVencimento: dataVencimentoBR,
@@ -557,7 +627,7 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 
         const allT = db.getAll();
         if (isNew) {
-            allT.push(finalTransaction as Transaction);
+            allT.push(finalTransaction);
         } else {
             const idx = allT.findIndex(t => t.identificador === transaction?.identificador);
             if (idx > -1) allT[idx] = { ...allT[idx], ...finalTransaction };
@@ -579,7 +649,6 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 
     return (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1060 }}>
-            {/* O HTML/JSX do modal permanece exatamente o mesmo, mantendo sua UI intacta */}
             <div className="modal-dialog modal-lg">
                 <div className="modal-content theme-surface shadow-lg">
                     <form onSubmit={handleSave}>

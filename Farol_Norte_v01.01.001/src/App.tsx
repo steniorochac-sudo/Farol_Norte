@@ -48,15 +48,13 @@ function AppContent(): JSX.Element {
           <i className="bi bi-compass-fill fs-3 text-warning"></i>
           <h5 className="mb-0 fw-bold text-light ls-1">{getPageTitle()}</h5>
         </div>
-        <div className="rounded-circle overflow-hidden border border-2 border-warning shadow-sm" style={{ width: '40px', height: '40px' }}>
-          <img src="https://ui-avatars.com/api/?name=Stenio+Rocha&background=F2B705&color=1C2331&bold=true" alt="Perfil" className="w-100 h-100 object-fit-cover" />
-        </div>
       </div>
 
       <div className="d-flex flex-grow-1 overflow-hidden">
         
         {/* === SIDEBAR DESKTOP === */}
         <div className="d-none d-md-flex flex-column theme-surface h-100 border-end border-secondary border-opacity-25 shadow-lg position-relative z-100" style={{ width: '280px', transition: 'all 0.3s ease' }}>
+          
           <div className="p-4 d-flex align-items-center gap-3 border-bottom border-secondary border-opacity-25">
             <i className="bi bi-compass-fill fs-1 text-warning drop-shadow-warning"></i>
             <div>
@@ -65,19 +63,7 @@ function AppContent(): JSX.Element {
             </div>
           </div>
 
-          <div className="p-4 border-bottom border-secondary border-opacity-25 d-flex align-items-center gap-3">
-             <div className="rounded-circle overflow-hidden border border-2 border-warning shadow-sm" style={{ width: '48px', height: '48px' }}>
-               <img src="https://ui-avatars.com/api/?name=Stenio+Rocha&background=F2B705&color=1C2331&bold=true" alt="Perfil" className="w-100 h-100 object-fit-cover" />
-             </div>
-             <div>
-               <div className="fw-bold text-light">Stenio Rocha</div>
-               <div className="text-success text-micro fw-bold d-flex align-items-center gap-1">
-                 <span className="p-1 bg-success rounded-circle"></span> Online
-               </div>
-             </div>
-          </div>
-
-          <nav className="flex-grow-1 overflow-auto p-3 scrollable-menu">
+          <nav className="flex-grow-1 p-3 mt-2" style={{ overflowY: 'auto', scrollbarWidth: 'none' }}>
             <div className="text-muted text-micro fw-bold text-uppercase mb-3 px-3 ls-1">Visão Geral</div>
             
             <NavLink to="/" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
