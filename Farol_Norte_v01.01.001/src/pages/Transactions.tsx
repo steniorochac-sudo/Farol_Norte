@@ -346,6 +346,40 @@ export default function Transactions() {
                             const isPositive = valorDisplay >= 0;
                             const isPagamento = t.tipo === 'Pagamento de Fatura';
 
+                            // --- INÍCIO DA LÓGICA DE VENCIMENTO ---
+                            const isUnpaid = !t.dataPagamento;
+                            let vencStatusClass = "text-muted";
+                            let vencIcon = "bi-calendar3";
+                            let vencText = t.data; 
+
+                            if (t.dataVencimento) {
+                                const vencDate = parseDateBR(t.dataVencimento);
+                                const hoje = new Date();
+                                hoje.setHours(0,0,0,0);
+                                
+                                if (isUnpaid && vencDate) {
+                                    if (vencDate < hoje) {
+                                        vencStatusClass = "text-danger fw-bold bg-danger bg-opacity-10 px-2 rounded";
+                                        vencIcon = "bi-exclamation-circle-fill text-danger";
+                                        vencText = `Atrasado: ${t.dataVencimento}`;
+                                    } else if (vencDate.getTime() === hoje.getTime()) {
+                                        vencStatusClass = "text-warning fw-bold bg-warning bg-opacity-10 px-2 rounded";
+                                        vencIcon = "bi-clock-fill text-warning";
+                                        vencText = `Hoje: ${t.dataVencimento}`;
+                                    } else {
+                                        vencStatusClass = "text-info";
+                                        vencIcon = "bi-calendar-event";
+                                        vencText = `Venc: ${t.dataVencimento}`;
+                                    }
+                                } else if (!isUnpaid) {
+                                    vencStatusClass = "text-muted opacity-75"; 
+                                    vencIcon = "bi-check-circle-fill text-success opacity-75";
+                                    // Se a data de vencimento for diferente da compra (ex: Cartão), mostra que foi pago.
+                                    vencText = t.dataVencimento !== t.data ? `Pago (Venc: ${t.dataVencimento})` : t.data;
+                                }
+                            }
+                            // --- FIM DA LÓGICA ---
+
                             return (
                                 <div key={t.identificador} className={`list-group-item bg-transparent d-flex align-items-center gap-3 py-3 px-3 border-bottom border-secondary border-opacity-25 hover-opacity ${isSelected ? 'bg-primary bg-opacity-25' : ''}`} style={{ borderLeft: isSelected ? '4px solid var(--farol-glow)' : '1px solid transparent' }}>
                                     <div className="form-check m-0 flex-shrink-0">
@@ -368,7 +402,12 @@ export default function Transactions() {
                                         </div>
 
                                         <div className="d-flex align-items-center mt-1 small" style={{ minWidth: 0 }}>
-                                            <span className="text-muted me-2 flex-shrink-0">{t.data}</span>
+                                            
+                                            {/* Data com Indicador Visual */}
+                                            <span className={`${vencStatusClass} me-2 flex-shrink-0 d-flex align-items-center`} title={`Data da Compra: ${t.data}`}>
+                                                <i className={`bi ${vencIcon} me-1`}></i>
+                                                <span style={{ fontSize: '0.75rem' }}>{vencText}</span>
+                                            </span>
 
                                             <div className="d-flex gap-1 overflow-hidden" style={{ flex: 1 }}>
                                                 {t.split && t.split.length > 0 ? (
@@ -442,6 +481,20 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
         const [d, m, y] = transaction.data.split('/');
         return `${y}-${m}-${d}`;
     });
+
+    // Novos campos de data de vencimento, e de pagamento
+    const [dataVencimentoIso, setDataVencimentoIso] = useState<string>(() => {
+        if (isNew || !transaction?.dataVencimento) return new Date().toISOString().split('T')[0];
+        const [d, m, y] = transaction.dataVencimento.split('/');
+        return `${y}-${m}-${d}`;
+    });
+
+    const [dataPagamentoIso, setDataPagamentoIso] = useState<string>(() => {
+        if (isNew || !transaction?.dataPagamento) return '';
+        const [d, m, y] = transaction.dataPagamento.split('/');
+        return `${y}-${m}-${d}`;
+    });
+
     const [accountId, setAccountId] = useState<string>(isNew ? (accounts[0]?.id || '') : (transaction?.account_id || ''));
     const [isReceita, setIsReceita] = useState<boolean>(isNew ? false : ((transaction?.valor || 0) >= 0));
 
@@ -461,16 +514,28 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
         const [y, m, d] = dataIso.split('-');
         const dataBR = `${d}/${m}/${y}`;
 
+        const [vY, vM, vD] = dataVencimentoIso.split('-');
+        const dataVencimentoBR = `${vD}/${vM}/${vY}`;
+
+        let dataPagamentoBR: string | null = null;
+        if (dataPagamentoIso) {
+            const [pY, pM, pD] = dataPagamentoIso.split('-');
+            dataPagamentoBR = `${pD}/${pM}/${pY}`;
+        }
+
         // Casting temporário devido a atributos flexíveis não declarados estritamente
-        let finalTransaction: any = {
-            identificador: isNew ? `manual-${generateUUID()}` : transaction?.identificador,
+        let finalTransaction: Transaction = { // Agora o TS reconhece!
+            identificador: isNew ? `manual-${generateUUID()}` : transaction?.identificador || '',
             data: dataBR,
+            dataVencimento: dataVencimentoBR,
+            dataPagamento: dataPagamentoBR,
             nome: desc,
             valor: valorFinalVisual * multiplier,
+            categoria: isSplit ? 'Múltipla' : singleCategory,
             account_id: accountId,
-            tipoLancamento: isNew ? 'conta' : (transaction as any)?.tipoLancamento,
-            status: isNew ? 'caixa' : (transaction as any)?.status,
-            tipo: isNew ? (isReceita ? 'Receita Manual' : 'Despesa Manual') : transaction?.tipo
+            tipoLancamento: isNew ? 'conta' : transaction?.tipoLancamento,
+            status: dataPagamentoBR ? (isNew ? 'caixa' : transaction?.status) : 'pendente',
+            tipo: isNew ? (isReceita ? 'Receita Manual' : 'Despesa Manual') : transaction?.tipo || ''
         };
 
         if (isSplit) {
@@ -532,14 +597,24 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
                                 <label className={`btn ${isReceita ? 'btn-success text-white border-success' : 'btn-outline-success border-opacity-50'} fw-bold`} htmlFor="radioRec">Entrada (+)</label>
                             </div>
 
+                            <div className="mb-3">
+                                <label className="form-label fw-bold text-muted small text-uppercase">Descrição</label>
+                                <input type="text" className="form-control" value={desc || ''} onChange={e => setDesc(e.target.value)} required />
+                            </div>
+
                             <div className="row mb-3">
-                                <div className="col-md-8 mb-3 mb-md-0">
-                                    <label className="form-label fw-bold text-muted small text-uppercase">Descrição</label>
-                                    <input type="text" className="form-control" value={desc || ''} onChange={e => setDesc(e.target.value)} required />
+                                <div className="col-md-4 mb-3 mb-md-0">
+                                    <label className="form-label fw-bold text-muted small text-uppercase">Data da Compra</label>
+                                    <input type="date" className="form-control text-light" value={dataIso || ''} onChange={e => setDataIso(e.target.value)} required />
+                                </div>
+                                <div className="col-md-4 mb-3 mb-md-0">
+                                    <label className="form-label fw-bold text-warning small text-uppercase">Vencimento</label>
+                                    <input type="date" className="form-control text-warning" value={dataVencimentoIso || ''} onChange={e => setDataVencimentoIso(e.target.value)} required />
                                 </div>
                                 <div className="col-md-4">
-                                    <label className="form-label fw-bold text-muted small text-uppercase">Data</label>
-                                    <input type="date" className="form-control text-light" value={dataIso || ''} onChange={e => setDataIso(e.target.value)} required />
+                                    <label className="form-label fw-bold text-success small text-uppercase">Pagamento</label>
+                                    <input type="date" className="form-control text-success" value={dataPagamentoIso || ''} onChange={e => setDataPagamentoIso(e.target.value)} />
+                                    <small className="text-muted text-xxs mt-1 d-block"><i className="bi bi-info-circle me-1"></i>Vazio = Pendente</small>
                                 </div>
                             </div>
 
