@@ -417,7 +417,7 @@ export default function Transactions() {
                                     </div>
 
                                     <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '40px', height: '40px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                                        <i className={`bi fs-5 ${(t as any).tipoLancamento === 'cartao' ? 'bi-credit-card text-warning' : 'bi-bank text-success'}`}></i>
+                                        <i className={`bi fs-5 ${(t as any).tipoLancamento === 'cartao' ? 'bi-credit-card' : 'bi-bank'} ${isReceita ? 'text-success' : 'text-danger'}`}></i>
                                     </div>
 
                                     <div className="flex-grow-1 cursor-pointer" style={{ minWidth: 0 }} onClick={() => setModalEdit({ show: true, transaction: t })}>
