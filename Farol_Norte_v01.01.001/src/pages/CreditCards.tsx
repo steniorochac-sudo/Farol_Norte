@@ -60,17 +60,20 @@ function criarFaturaVazia(): Fatura {
 // COMPONENTE PRINCIPAL
 // =========================================================
 export default function CreditCards() {
-    const { transactions = [], currentAccountId = 'all', refreshData = () => {} } = useFinance();
-    
+    const { transactions = [], currentAccountId = 'all', refreshData = () => { } } = useFinance();
+
     // 1. ESTADOS PRINCIPAIS
     const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
     const [selectedInvoiceMonth, setSelectedInvoiceMonth] = useState<string | null>(() => localStorage.getItem("creditcard_last_month") || null);
-    
-    // 2. ESTADOS DO NOVO MODAL WIZARD (Passo a Passo)
+
+    // 2. ESTADOS DO NOVO MODAL WIZARD 
     const [showModal, setShowModal] = useState<boolean>(false);
     const [linkStep, setLinkStep] = useState<number>(1);
     const [targetInvoiceMonth, setTargetInvoiceMonth] = useState<string | null>(null);
     const [selectedPaymentIds, setSelectedPaymentIds] = useState<Set<string>>(new Set());
+
+    // Gatilho para forçar a tela a redesenhar na mesma hora
+    const [updateTrigger, setUpdateTrigger] = useState<number>(0);
 
     // 3. DADOS BÁSICOS (Cartões)
     const cartoes = cardsDb.getAll();
@@ -86,10 +89,12 @@ export default function CreditCards() {
     // 4. MEMORIZAÇÃO: Processamento Pesado da Fatura
     const { faturas, pagamentosProcessados, closingDay } = useMemo(() => {
         if (!selectedCardId) return { faturas: {} as Record<string, Fatura>, pagamentosProcessados: [], closingDay: 1 };
-        
+
         const cardObj = cartoesDaConta.find((c) => c.id === selectedCardId);
-        const cDay = cardObj ? parseInt((cardObj as any).closingDay) : 1;
-        const allTrans = transactions.filter((t: any) => t.card_id === selectedCardId);
+        const cDay = cardObj ? parseInt((cardObj as any).closingDay || (cardObj as any).diaFechamento || '1', 10) : 1;
+
+        // Puxamos direto do banco de dados para evitar qualquer atraso do Contexto React
+        const allTrans = db.getAll().filter((t: any) => t.card_id === selectedCardId || t.account_id === selectedCardId);
 
         const fatObj: Record<string, Fatura> = {};
         const pgtosProc: PagamentoProcessado[] = [];
@@ -127,17 +132,19 @@ export default function CreditCards() {
         Object.keys(fatObj).forEach((mes) => {
             const f = fatObj[mes];
             if (f.totalGastos < 0) f.totalGastos = 0;
-            const saldo = f.totalGastos - f.totalPago;
+            
+            // CORREÇÃO: Força o arredondamento absoluto para eliminar "fantasmas decimais"
+            const saldo = parseFloat((f.totalGastos - f.totalPago).toFixed(2));
             f.saldoRestante = saldo;
 
-            if (saldo <= 1 && saldo >= -1) f.status = "PAGO";
-            else if (saldo < -1) f.status = "SUPER";
+            if (saldo <= 0.05 && saldo >= -0.05) f.status = "PAGO";
+            else if (saldo < -0.05) f.status = "SUPER";
             else if (f.totalPago > 0) f.status = "PARCIAL";
             else f.status = "ABERTO";
         });
 
         return { faturas: fatObj, pagamentosProcessados: pgtosProc, closingDay: cDay };
-    }, [transactions, selectedCardId, cartoesDaConta]);
+    }, [transactions, selectedCardId, cartoesDaConta, updateTrigger]);
 
     // 5. GERENCIAMENTO DE MÊS DA FATURA
     const mesesDisponiveis = useMemo(() => Object.keys(faturas).sort().reverse(), [faturas]);
@@ -175,7 +182,7 @@ export default function CreditCards() {
 
     const handleConfirmarVinculo = () => {
         if (selectedPaymentIds.size === 0 || !targetInvoiceMonth) return;
-        
+
         const faturaAlvo = faturas[targetInvoiceMonth];
         if (!faturaAlvo) return;
 
@@ -190,7 +197,7 @@ export default function CreditCards() {
         }
 
         const allT = db.getAll();
-        let saldoVirtual = faturaAlvo.saldoRestante; 
+        let saldoVirtual = faturaAlvo.saldoRestante;
 
         selectedPaymentIds.forEach(id => {
             const pgto = pagamentosProcessados.find(p => p.original.identificador === id);
@@ -200,37 +207,98 @@ export default function CreditCards() {
             let valorParaVincular = 0;
 
             if (saldoVirtual <= 0) {
-                valorParaVincular = creditoDisponivel; 
+                valorParaVincular = creditoDisponivel;
             } else {
-                valorParaVincular = Math.min(saldoVirtual, creditoDisponivel); 
+                valorParaVincular = Math.min(saldoVirtual, creditoDisponivel);
             }
 
-            saldoVirtual -= valorParaVincular; 
+            saldoVirtual -= valorParaVincular;
 
             const tIndex = allT.findIndex((t: any) => t.identificador === pgto.original.identificador);
             if (tIndex > -1) {
                 const trans: any = allT[tIndex];
                 if (!trans.faturaLinks) trans.faturaLinks = [];
                 trans.faturaLinks.push({ mes: targetInvoiceMonth, valor: valorParaVincular });
-                if (trans.faturaReferencia) delete trans.faturaReferencia; 
+                if (trans.faturaReferencia) delete trans.faturaReferencia;
             }
         });
 
+        // === NOVO: CASCATA DE BAIXA (COM PROTEÇÃO ANTI-UNDEFINED) ===
+        if (saldoVirtual <= 0.05) {
+            const card = cartoesDaConta.find(c => c.id === selectedCardId);
+            const diaVencimento = card ? parseInt((card as any).dueDay || (card as any).diaVencimento || '10', 10) : 10;
+            const diaFechamento = card ? parseInt((card as any).closingDay || (card as any).diaFechamento || '1', 10) : 1;
+
+            faturaAlvo.gastos.forEach(gasto => {
+                const idx = allT.findIndex((t: any) => t.identificador === gasto.identificador);
+                if (idx > -1) {
+                    allT[idx].status = 'pago';
+
+                    // Cálculo matemático blindado da data
+                    let dataSegura = allT[idx].data;
+                    if (allT[idx].data && allT[idx].data.includes('/')) {
+                        const [d, m, y] = allT[idx].data.split('/');
+                        let mesF = parseInt(m, 10);
+                        let anoF = parseInt(y, 10);
+                        if (parseInt(d, 10) >= diaFechamento) {
+                            mesF++; if (mesF > 12) { mesF = 1; anoF++; }
+                        }
+                        dataSegura = `${String(diaVencimento).padStart(2, '0')}/${String(mesF).padStart(2, '0')}/${anoF}`;
+                    }
+
+                    allT[idx].dataVencimento = dataSegura;
+                    allT[idx].dataPagamento = dataSegura;
+                }
+            });
+        }
+        // =========================================================
+
         db.save(allT);
-        refreshData(); 
-        
+        refreshData();
+
         setLinkStep(1);
         setSelectedPaymentIds(new Set());
         setTargetInvoiceMonth(null);
+        setUpdateTrigger(prev => prev + 1);
     };
 
     const handleDesfazerVinculo = (idTransacao: string, mesAlvo: string) => {
         const allT = db.getAll();
         const tIndex = allT.findIndex((t: any) => t.identificador === idTransacao);
+
         if (tIndex > -1 && (allT[tIndex] as any).faturaLinks) {
+            // 1. Remove o vínculo do recibo
             (allT[tIndex] as any).faturaLinks = (allT[tIndex] as any).faturaLinks.filter((l: any) => l.mes !== mesAlvo);
+
+            // 2. CASCATA REVERSA: Fatura reabriu? Volta as compras para pendente!
+            const cardObj = cartoesDaConta.find((c) => c.id === selectedCardId);
+            const cDay = cardObj ? parseInt((cardObj as any).closingDay || (cardObj as any).diaFechamento || '1', 10) : 1;
+            const vDay = cardObj ? parseInt((cardObj as any).dueDay || (cardObj as any).diaVencimento || '10', 10) : 10;
+
+            allT.forEach((t: any) => {
+                const isCartao = t.tipoLancamento === 'cartao' || !!t.card_id;
+
+                if (isCartao && t.tipo !== "Pagamento de Fatura" && (t.card_id === selectedCardId || t.account_id === selectedCardId)) {
+                    const mesRef = calcularMesReferencia(t.data, cDay);
+
+                    if (mesRef === mesAlvo) {
+                        t.status = 'pendente';
+                        t.dataPagamento = null; // Apaga o pagamento
+
+                        // Reconstrói o vencimento caso estivesse quebrado com "undefined"
+                        if (!t.dataVencimento || t.dataVencimento.includes('undefined') || t.dataVencimento.includes('NaN')) {
+                            const [d, m, y] = t.data.split('/');
+                            let mesF = parseInt(m, 10);
+                            let anoF = parseInt(y, 10);
+                            if (parseInt(d, 10) >= cDay) { mesF++; if (mesF > 12) { mesF = 1; anoF++; } }
+                            t.dataVencimento = `${String(vDay).padStart(2, '0')}/${String(mesF).padStart(2, '0')}/${anoF}`;
+                        }
+                    }
+                }
+            });
+
             db.save(allT);
-            refreshData();
+            setUpdateTrigger(prev => prev + 1); // <-- FORÇA A TELA A REDESENHAR INSTANTANEAMENTE
         }
     };
 
@@ -273,11 +341,11 @@ export default function CreditCards() {
             </div>
 
             {/* ABAS DOS CARTÕES */}
-            <ul className="nav nav-pills mb-4 gap-2 overflow-auto flex-nowrap" style={{scrollbarWidth: 'none'}}>
+            <ul className="nav nav-pills mb-4 gap-2 overflow-auto flex-nowrap" style={{ scrollbarWidth: 'none' }}>
                 {cartoesDaConta.map((c: any) => (
                     <li className="nav-item flex-shrink-0" key={c.id}>
-                        <button 
-                            className={`nav-link px-4 rounded-pill border ${c.id === selectedCardId ? "bg-warning text-dark border-warning fw-bold" : "bg-transparent text-light border-secondary border-opacity-50"}`} 
+                        <button
+                            className={`nav-link px-4 rounded-pill border ${c.id === selectedCardId ? "bg-warning text-dark border-warning fw-bold" : "bg-transparent text-light border-secondary border-opacity-50"}`}
                             onClick={() => setSelectedCardId(c.id)}>
                             {c.nome}
                         </button>
@@ -292,18 +360,18 @@ export default function CreditCards() {
                         <div className="row g-4 align-items-center justify-content-center">
                             <div className="col-md-6 text-center text-md-start">
                                 <label className="small text-muted mb-2 text-uppercase fw-bold">Fatura (Fecha dia {closingDay})</label>
-                                
+
                                 <div className="input-group flex-nowrap justify-content-center justify-content-md-start position-relative" style={{ zIndex: 105, width: '100%' }}>
                                     <button className="btn btn-outline-secondary border-secondary text-white-50 radius-left-8" onClick={() => navegarFatura(1)} disabled={selectedInvoiceMonth ? mesesDisponiveis.indexOf(selectedInvoiceMonth) === mesesDisponiveis.length - 1 : true}><i className="bi bi-chevron-left"></i></button>
-                                    
+
                                     <div className="position-relative z-150" style={{ minWidth: '220px', maxWidth: '300px' }}>
                                         <div className="h-100 mx-n1">
-                                            <CustomSelect 
-                                                options={monthOptions} 
-                                                value={selectedInvoiceMonth || ""} 
-                                                onChange={(val) => changeMonth(val)} 
-                                                className="h-100 text-center" 
-                                                textColor="text-light fw-bold" 
+                                            <CustomSelect
+                                                options={monthOptions}
+                                                value={selectedInvoiceMonth || ""}
+                                                onChange={(val) => changeMonth(val)}
+                                                className="h-100 text-center"
+                                                textColor="text-light fw-bold"
                                             />
                                         </div>
                                     </div>
@@ -354,7 +422,7 @@ export default function CreditCards() {
                                     </div>
                                 </div>
                             </div>
-                            
+
                             {faturaAtual.saldoRestante < -1 && (
                                 <div className="alert alert-info bg-transparent border-info border-opacity-50 text-info mt-4 mb-0 py-2 small text-center text-xxs">
                                     <i className="bi bi-piggy-bank me-2"></i> Existe um crédito de <strong>{formatCurrency(Math.abs(faturaAtual.saldoRestante))}</strong>.
@@ -404,7 +472,7 @@ export default function CreditCards() {
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1060 }}>
                     <div className="modal-dialog modal-dialog-centered modal-lg">
                         <div className="modal-content theme-surface shadow-lg border-secondary border-opacity-50">
-                            
+
                             {/* PASSO 1: LISTA DE FATURAS */}
                             {linkStep === 1 && (
                                 <div className="fade-in">
@@ -415,20 +483,39 @@ export default function CreditCards() {
                                     <div className="modal-body p-4">
                                         <p className="text-muted small mb-4">Selecione para qual mês você deseja alocar um pagamento ou verificar os vínculos atuais.</p>
                                         <div className="list-group bg-transparent scrollable-menu" style={{ maxHeight: '55vh' }}>
-                                            {mesesDisponiveis.map(mes => {
+                                            {[...mesesDisponiveis].sort((mesA, mesB) => {
+                                                const fatA = faturas[mesA];
+                                                const fatB = faturas[mesB];
+                                                
+                                                // Considera "Pago" qualquer fatura com saldo zerado ou credor (PAGO ou SUPER)
+                                                const isPagoA = fatA.saldoRestante <= 0;
+                                                const isPagoB = fatB.saldoRestante <= 0;
+
+                                                // 1º Nível: Separa Abertas (Topo) de Pagas (Fundo)
+                                                if (isPagoA !== isPagoB) return isPagoA ? 1 : -1;
+                                                
+                                                // 2º Nível: Ordenação interna
+                                                if (!isPagoA) {
+                                                    // Se abertas: Mais antigas primeiro (ascendente)
+                                                    return mesA.localeCompare(mesB);
+                                                } else {
+                                                    // Se pagas: Mais novas primeiro (descendente)
+                                                    return mesB.localeCompare(mesA);
+                                                }
+                                            }).map(mes => {
                                                 const fat = faturas[mes];
                                                 return (
                                                     <div key={mes} className="list-group-item bg-transparent border border-secondary border-opacity-25 mb-3 rounded-3 p-3">
                                                         <div className="d-flex justify-content-between align-items-center">
                                                             <div>
-                                                                <strong className="fs-5 text-light">{formatMonthLabel(mes)}</strong> 
+                                                                <strong className="fs-5 text-light">{formatMonthLabel(mes)}</strong>
                                                                 {fat.status === 'ABERTO' && <span className="badge bg-danger bg-opacity-25 text-danger ms-2 text-micro">Aberto</span>}
                                                                 {fat.status === 'PARCIAL' && <span className="badge bg-warning bg-opacity-25 text-warning ms-2 text-micro">Parcial</span>}
                                                                 {fat.status === 'SUPER' && <span className="badge bg-info bg-opacity-25 text-info ms-2 text-micro">Crédito</span>}
                                                                 {fat.status === 'PAGO' && <span className="badge bg-success bg-opacity-25 text-success ms-2 text-micro">Pago</span>}
-                                                                <br/>
-                                                                <span className={`small ${fat.saldoRestante > 0 ? "text-danger fw-bold" : "text-success"}`}>
-                                                                    Falta pagar: {fat.saldoRestante > 0 ? formatCurrency(fat.saldoRestante) : "R$ 0,00"}
+                                                                <br />
+                                                                <span className={`small ${fat.saldoRestante > 0 ? "text-danger fw-bold" : "text-success fw-bold"}`}>
+                                                                    {fat.saldoRestante > 0 ? `Falta pagar: ${formatCurrency(fat.saldoRestante)}` : "Fatura Quitada"}
                                                                 </span>
                                                             </div>
                                                             <button className="btn btn-sm btn-outline-warning text-warning border-opacity-50 fw-bold px-3 py-2 shadow-sm" onClick={() => iniciarVinculo(mes)}>
@@ -440,10 +527,10 @@ export default function CreditCards() {
                                                             <div className="mt-3 pt-3 border-top border-secondary border-opacity-25">
                                                                 <small className="text-muted d-block mb-2 text-uppercase text-micro">Recibos Atrelados:</small>
                                                                 {fat.pagamentosVinculados.map((v: any) => (
-                                                                    <div key={v.identificador} className="d-flex justify-content-between align-items-center mb-2 px-3 py-2 rounded" style={{backgroundColor: 'rgba(255,255,255,0.05)'}}>
+                                                                    <div key={v.identificador} className="d-flex justify-content-between align-items-center mb-2 px-3 py-2 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
                                                                         <span className="text-light small d-flex align-items-center">
                                                                             <i className="bi bi-check-circle-fill text-success me-2"></i>
-                                                                            <strong className="text-success me-1">{formatCurrency(v.valorVinculado)}</strong> 
+                                                                            <strong className="text-success me-1">{formatCurrency(v.valorVinculado)}</strong>
                                                                             <span className="text-muted text-xxs d-none d-md-inline">({v.data})</span>
                                                                         </span>
                                                                         <button className="btn btn-link text-danger p-0 ms-2 text-decoration-none opacity-75 hover-opacity" onClick={(e) => { e.stopPropagation(); handleDesfazerVinculo(v.identificador, mes); }} title="Remover Vínculo">
@@ -482,12 +569,14 @@ export default function CreditCards() {
                                                     <button type="button" className="btn-close btn-close-white ms-auto" onClick={fecharModal}></button>
                                                 </div>
                                                 <div className="modal-body p-4">
-                                                    
+
                                                     <div className="alert bg-success bg-opacity-10 border border-success border-opacity-25 text-success mb-4 d-flex align-items-center gap-3 radius-12 p-3">
                                                         <i className="bi bi-info-circle fs-4"></i>
                                                         <div>
                                                             <div className="fw-bold small text-uppercase">Destino dos Pagamentos</div>
-                                                            <div className="fs-5 fw-bold text-light">Fatura de {targetInvoiceMonth ? formatMonthLabel(targetInvoiceMonth) : ''}</div>
+                                                            <div className="fs-5 fw-bold text-light">
+                                                                Fatura de {targetInvoiceMonth ? formatMonthLabel(targetInvoiceMonth) : ''} - <span className="text-warning">{formatCurrency(saldoFatura)}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
 
@@ -496,23 +585,26 @@ export default function CreditCards() {
                                                             const esgotadoA = a.disponivel <= 0.01;
                                                             const esgotadoB = b.disponivel <= 0.01;
                                                             if (esgotadoA !== esgotadoB) return esgotadoA ? 1 : -1;
+                                                            
                                                             const [da, ma, ya] = a.original.data.split("/");
                                                             const [db, mb, yb] = b.original.data.split("/");
-                                                            return new Date(parseInt(yb), parseInt(mb) - 1, parseInt(db)).getTime() - new Date(parseInt(ya), parseInt(ma) - 1, parseInt(da)).getTime();
+                                                            
+                                                            // Ordem cronológica: Mais antigo para o mais novo (ya - yb)
+                                                            return new Date(parseInt(ya), parseInt(ma) - 1, parseInt(da)).getTime() - new Date(parseInt(yb), parseInt(mb) - 1, parseInt(db)).getTime();
                                                         }).map(p => {
                                                             const esgotado = p.disponivel <= 0.01;
                                                             const isSelected = selectedPaymentIds.has(p.original.identificador);
-                                                            
+
                                                             return (
-                                                                <div key={p.original.identificador} 
-                                                                     className={`list-group-item bg-transparent d-flex flex-column border border-secondary border-opacity-25 mb-3 rounded-3 p-3 ${esgotado ? 'opacity-50' : 'cursor-pointer'} ${isSelected ? 'border-warning bg-warning bg-opacity-10' : 'hover-opacity'}`}
-                                                                     onClick={() => {
-                                                                         if (esgotado) return;
-                                                                         const newSet = new Set(selectedPaymentIds);
-                                                                         if (newSet.has(p.original.identificador)) newSet.delete(p.original.identificador);
-                                                                         else newSet.add(p.original.identificador);
-                                                                         setSelectedPaymentIds(newSet);
-                                                                     }}>
+                                                                <div key={p.original.identificador}
+                                                                    className={`list-group-item bg-transparent d-flex flex-column border border-secondary border-opacity-25 mb-3 rounded-3 p-3 ${esgotado ? 'opacity-50' : 'cursor-pointer'} ${isSelected ? 'border-warning bg-warning bg-opacity-10' : 'hover-opacity'}`}
+                                                                    onClick={() => {
+                                                                        if (esgotado) return;
+                                                                        const newSet = new Set(selectedPaymentIds);
+                                                                        if (newSet.has(p.original.identificador)) newSet.delete(p.original.identificador);
+                                                                        else newSet.add(p.original.identificador);
+                                                                        setSelectedPaymentIds(newSet);
+                                                                    }}>
                                                                     <div className="d-flex justify-content-between align-items-center w-100">
                                                                         <div>
                                                                             <div className="fw-bold mb-1 text-light"><i className="bi bi-calendar-event text-muted me-2"></i>Pago em {p.original.data}</div>
@@ -522,12 +614,12 @@ export default function CreditCards() {
                                                                             <small className="text-muted text-xxs">Valor original do recibo: {formatCurrency(p.valorTotal)}</small>
                                                                         </div>
                                                                         <div>
-                                                                            {esgotado ? <span className="badge bg-secondary bg-opacity-25 text-muted border border-secondary border-opacity-50 text-micro">ESGOTADO</span> : 
-                                                                             isSelected ? <i className="bi bi-check-square-fill fs-2 text-warning"></i> : <i className="bi bi-square fs-3 text-muted"></i>}
+                                                                            {esgotado ? <span className="badge bg-secondary bg-opacity-25 text-muted border border-secondary border-opacity-50 text-micro">ESGOTADO</span> :
+                                                                                isSelected ? <i className="bi bi-check-square-fill fs-2 text-warning"></i> : <i className="bi bi-square fs-3 text-muted"></i>}
                                                                         </div>
                                                                     </div>
-                                                                    <div className="progress mt-3 bg-secondary bg-opacity-25" style={{height: '6px', borderRadius: '4px'}}>
-                                                                        <div className={`progress-bar ${esgotado ? "bg-secondary" : isSelected ? "bg-warning" : "bg-success"}`} style={{width: `${Math.round((p.valorUsado / p.valorTotal) * 100)}%`}}></div>
+                                                                    <div className="progress mt-3 bg-secondary bg-opacity-25" style={{ height: '6px', borderRadius: '4px' }}>
+                                                                        <div className={`progress-bar ${esgotado ? "bg-secondary" : isSelected ? "bg-warning" : "bg-success"}`} style={{ width: `${Math.round((p.valorUsado / p.valorTotal) * 100)}%` }}></div>
                                                                     </div>
                                                                 </div>
                                                             );
@@ -535,7 +627,7 @@ export default function CreditCards() {
                                                         {pagamentosProcessados.length === 0 && <div className="text-muted text-center py-5">Nenhum pagamento de fatura identificado.</div>}
                                                     </div>
                                                 </div>
-                                                
+
                                                 {/* BARRA INFERIOR COM O SOMATÓRIO EM TEMPO REAL */}
                                                 <div className="modal-footer border-top border-secondary border-opacity-25 px-4 py-3 d-flex justify-content-between align-items-center">
                                                     <div>
