@@ -48,15 +48,13 @@ function AppContent(): JSX.Element {
           <i className="bi bi-compass-fill fs-3 text-warning"></i>
           <h5 className="mb-0 fw-bold text-light ls-1">{getPageTitle()}</h5>
         </div>
-        <div className="rounded-circle overflow-hidden border border-2 border-warning shadow-sm" style={{ width: '40px', height: '40px' }}>
-          <img src="https://ui-avatars.com/api/?name=Stenio+Rocha&background=F2B705&color=1C2331&bold=true" alt="Perfil" className="w-100 h-100 object-fit-cover" />
-        </div>
       </div>
 
       <div className="d-flex flex-grow-1 overflow-hidden">
         
         {/* === SIDEBAR DESKTOP === */}
         <div className="d-none d-md-flex flex-column theme-surface h-100 border-end border-secondary border-opacity-25 shadow-lg position-relative z-100" style={{ width: '280px', transition: 'all 0.3s ease' }}>
+          
           <div className="p-4 d-flex align-items-center gap-3 border-bottom border-secondary border-opacity-25">
             <i className="bi bi-compass-fill fs-1 text-warning drop-shadow-warning"></i>
             <div>
@@ -65,19 +63,7 @@ function AppContent(): JSX.Element {
             </div>
           </div>
 
-          <div className="p-4 border-bottom border-secondary border-opacity-25 d-flex align-items-center gap-3">
-             <div className="rounded-circle overflow-hidden border border-2 border-warning shadow-sm" style={{ width: '48px', height: '48px' }}>
-               <img src="https://ui-avatars.com/api/?name=Stenio+Rocha&background=F2B705&color=1C2331&bold=true" alt="Perfil" className="w-100 h-100 object-fit-cover" />
-             </div>
-             <div>
-               <div className="fw-bold text-light">Stenio Rocha</div>
-               <div className="text-success text-micro fw-bold d-flex align-items-center gap-1">
-                 <span className="p-1 bg-success rounded-circle"></span> Online
-               </div>
-             </div>
-          </div>
-
-          <nav className="flex-grow-1 overflow-auto p-3 scrollable-menu">
+          <nav className="flex-grow-1 p-3 mt-2" style={{ overflowY: 'auto', scrollbarWidth: 'none' }}>
             <div className="text-muted text-micro fw-bold text-uppercase mb-3 px-3 ls-1">Visão Geral</div>
             
             <NavLink to="/" className={({ isActive }) => `nav-link mb-2 p-3 radius-12 d-flex align-items-center transition-all ${isActive ? 'bg-warning text-dark fw-bold shadow-sm' : 'text-light hover-opacity'}`}>
@@ -162,35 +148,33 @@ function AppContent(): JSX.Element {
       {/* === BOTTOM NAV MOBILE === */}
       <div className="d-md-none position-fixed bottom-0 w-100 theme-surface border-top border-secondary border-opacity-50 d-flex justify-content-around align-items-center pb-2 pt-2 px-1" style={{ zIndex: 1050, height: '70px' }}>
         
-        <NavLink to="/" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
+        {/* Lado Esquerdo (2 itens) */}
+        <NavLink to="/" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px', flex: 1 }}>
           <i className="bi bi-speedometer2 fs-4 mb-1 line-height-1"></i>
           <span className="text-micro">Painel</span>
         </NavLink>
         
-        <NavLink to="/transacoes" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
+        <NavLink to="/transacoes" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px', flex: 1 }}>
           <i className="bi bi-arrow-left-right fs-4 mb-1 line-height-1"></i>
           <span className="text-micro">Trans.</span>
         </NavLink>
 
-        <NavLink to="/dre" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
-          <i className="bi bi-funnel-fill fs-4 mb-1 line-height-1"></i>
-          <span className="text-micro">DRE</span>
-        </NavLink>
-
-        <div className="nav-link d-flex flex-column align-items-center justify-content-center position-relative" style={{ minWidth: '60px', marginTop: '-30px' }} onClick={() => setIsMenuOpen(true)}>
-          <div className="bg-warning text-dark rounded-circle d-flex align-items-center justify-content-center shadow-lg" style={{ width: '56px', height: '56px', border: '4px solid var(--farol-bg)' }}>
+        {/* Botão Central Flutuante (Menu) */}
+        <div className="nav-link d-flex flex-column align-items-center justify-content-center position-relative" style={{ minWidth: '70px', marginTop: '-30px' }} onClick={() => setIsMenuOpen(true)}>
+          <div className="bg-warning text-dark rounded-circle d-flex align-items-center justify-content-center shadow-lg hover-scale" style={{ width: '56px', height: '56px', border: '4px solid var(--farol-bg)' }}>
             <i className="bi bi-list fs-1"></i>
           </div>
         </div>
 
-        <NavLink to="/contas" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
+        {/* Lado Direito (2 itens) */}
+        <NavLink to="/contas" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px', flex: 1 }}>
           <i className="bi bi-bank2 fs-4 mb-1 line-height-1"></i>
           <span className="text-micro">Contas</span>
         </NavLink>
 
-        <NavLink to="/cartoes" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px' }}>
-          <i className="bi bi-credit-card-2-front fs-4 mb-1 line-height-1"></i>
-          <span className="text-micro">Cartões</span>
+        <NavLink to="/dre" className={({ isActive }) => `nav-link d-flex flex-column align-items-center justify-content-center ${isActive ? 'text-warning fw-bold' : 'text-light opacity-75'}`} style={{ minWidth: '50px', flex: 1 }}>
+          <i className="bi bi-funnel-fill fs-4 mb-1 line-height-1"></i>
+          <span className="text-micro">DRE</span>
         </NavLink>
 
       </div>

@@ -23,12 +23,11 @@ export default function Background({ children }: BackgroundProps) {
           {/* 1. Estrelas bem sutis ao fundo */}
           <circle cx="150" cy="100" r="1.5" fill="#FFF" opacity="0.3" />
           <circle cx="450" cy="200" r="1" fill="#FFF" opacity="0.5" />
-          <circle cx="850" cy="150" r="2" fill="#FFF" opacity="0.8" />
-          <circle cx="700" cy="80" r="1" fill="#FFF" opacity="0.4" />
-          <circle cx="250" cy="250" r="2" fill="#FFF" opacity="0.2" />
-          <circle cx="950" cy="250" r="1.5" fill="#FFF" opacity="0.6" />
+          <circle cx="850" cy="150" r="2" fill="#FFF" opacity="0.2" />
+          <circle cx="700" cy="50" r="1" fill="#FFF" opacity="0.6" />
+          <circle cx="200" cy="250" r="1.5" fill="#FFF" opacity="0.1" />
 
-          {/* 2. As Montanhas ao longe (O Porto / Continente) */}
+          {/* 2. Montanhas ao longe (O Porto / Continente) */}
           <path d="M 0 420 Q 150 380 300 430 T 700 400 T 1000 440 L 1000 600 L 0 600 Z" fill="#08141F" />
           <path d="M 0 460 Q 250 440 500 480 T 1000 450 L 1000 600 L 0 600 Z" fill="#06101A" />
 
@@ -40,24 +39,19 @@ export default function Background({ children }: BackgroundProps) {
           <rect x="840" y="540" width="20" height="2" fill="#F2B705" opacity="0.1" />
 
           {/* 4. A Ilha/Penhasco do Farol (À Direita) */}
-          <path d="M 720 520 Q 770 450 850 450 Q 930 450 980 520 Z" fill="#03080D" />
+          <path d="M 720 520 Q 770 450 850 450 Q 930 450 980 520 Z" fill="#040A10" />
 
-          {/* 5. A Estrutura do Farol */}
-          <path d="M 830 460 L 850 460 L 850 520 L 830 520 Z" fill="#0A1520" />
-          <path d="M 835 440 L 845 440 L 845 460 L 835 460 Z" fill="#1C2833" />
-          
-          {/* A Lâmpada Acesa */}
-          <circle cx="840" cy="445" r="4" fill="#F2B705" opacity="0.9" />
+          {/* 5. A Torre do Farol */}
+          <path d="M 830 450 L 840 280 L 860 280 L 870 450 Z" fill="#03070B" /> {/* Corpo */}
+          <rect x="835" y="270" width="30" height="10" fill="#1FA67A" opacity="0.8" /> {/* Base da Lanterna verde */}
+          <rect x="840" y="255" width="20" height="15" fill="#F2B705" /> {/* Lâmpada Acesa */}
+          <polygon points="835,255 865,255 850,240" fill="#03070B" /> {/* Teto */}
 
-          {/* 6. O Feixe de Luz (com animação CSS no index.css) */}
-          <polygon 
-            points="840,445 0,380 0,510" 
-            fill="url(#beamGradient)" 
-            style={{ 
-              animation: 'farol-spin 10s infinite linear',
-              transformOrigin: '840px 445px'
-            }} 
-          />
+          {/* 6. O Feixe de Luz Giratório (Animado pelo CSS) */}
+          <g className="light-beam">
+            {/* O polígono desenha um feixe que sai da lâmpada e abre para a esquerda */}
+            <polygon points="850,262 -200,50 -200,550" fill="url(#beamGradient)" style={{ mixBlendMode: 'screen' }} />
+          </g>
         </svg>
       </div>
 
