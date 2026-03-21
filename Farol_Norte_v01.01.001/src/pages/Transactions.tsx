@@ -377,33 +377,63 @@ export default function Transactions() {
                             let vencStatusClass = "text-muted";
                             let vencIcon = "bi-calendar3";
                             let vencText = t.data;
+                            let showCompraDate = false;
 
                             if (isCartao) {
-                                const vencDate = parseDateBR(t.dataVencimento || t.data);
+                                showCompraDate = true; 
+                                
+                                // AUTO-RECÁLCULO: Se a transação veio de importação e não tem dataVencimento no banco, calcula na hora
+                                let finalVencimento = t.dataVencimento;
+                                const isVencimentoValido = finalVencimento && finalVencimento !== 'undefined' && finalVencimento !== 'NaN' && finalVencimento !== 'null';
+                                
+                                if (!isVencimentoValido && t.data) {
+                                    const cards = cardsDb.getAll();
+                                    const card = cards.find(c => c.id === t.card_id || c.id === t.account_id);
+                                    if (card) {
+                                        const [dStr, mStr, yStr] = t.data.split('/');
+                                        const diaCompra = parseInt(dStr, 10);
+                                        let mesFatura = parseInt(mStr, 10);
+                                        let anoFatura = parseInt(yStr, 10);
+                                        
+                                        const fechamento = parseInt((card as any).closingDay || (card as any).diaFechamento || '1', 10);
+                                        const vencimento = parseInt((card as any).dueDay || (card as any).diaVencimento || '10', 10);
+                                        
+                                        if (diaCompra >= fechamento) {
+                                            mesFatura++;
+                                            if (mesFatura > 12) { mesFatura = 1; anoFatura++; }
+                                        }
+                                        finalVencimento = `${String(vencimento).padStart(2, '0')}/${String(mesFatura).padStart(2, '0')}/${anoFatura}`;
+                                    } else {
+                                        finalVencimento = t.data;
+                                    }
+                                }
+
+                                const dataRef = finalVencimento || t.data;
+                                const vencDate = parseDateBR(dataRef);
                                 const hoje = new Date();
                                 hoje.setHours(0, 0, 0, 0);
 
                                 if (isPago) {
                                     vencStatusClass = "text-muted opacity-75";
                                     vencIcon = "bi-check-circle-fill text-success opacity-75";
-                                    vencText = `Fatura Paga (${t.dataVencimento})`;
+                                    vencText = `Fatura Paga (${dataRef})`;
                                 } else if (vencDate) {
                                     if (vencDate < hoje) {
                                         vencStatusClass = "text-danger fw-bold bg-danger bg-opacity-10 px-2 rounded";
                                         vencIcon = "bi-exclamation-circle-fill text-danger";
-                                        vencText = `Atrasado: ${t.dataVencimento}`;
+                                        vencText = `Venc: ${dataRef} (Atrasado)`;
                                     } else if (vencDate.getTime() === hoje.getTime()) {
                                         vencStatusClass = "text-warning fw-bold bg-warning bg-opacity-10 px-2 rounded";
                                         vencIcon = "bi-clock-fill text-warning";
-                                        vencText = `Vence Hoje: ${t.dataVencimento}`;
+                                        vencText = `Vence Hoje: ${dataRef}`;
                                     } else {
                                         vencStatusClass = "text-info";
                                         vencIcon = "bi-calendar-event";
-                                        vencText = `Venc: ${t.dataVencimento}`;
+                                        vencText = `Venc: ${dataRef}`;
                                     }
                                 }
                             } else {
-                                // Extrato Bancário é sempre pago na hora
+                                // Extrato Bancário é sempre pago na hora (Mantém a lógica atual)
                                 vencStatusClass = "text-muted opacity-75";
                                 vencIcon = "bi-check-circle-fill text-success opacity-75";
                                 vencText = t.data;
@@ -434,10 +464,18 @@ export default function Transactions() {
                                         <div className="d-flex align-items-center mt-1 small" style={{ minWidth: 0 }}>
 
                                             {/* Data com Indicador Visual */}
-                                            <span className={`${vencStatusClass} me-2 flex-shrink-0 d-flex align-items-center`} title={`Data da Compra: ${t.data}`}>
-                                                <i className={`bi ${vencIcon} me-1`}></i>
-                                                <span style={{ fontSize: '0.75rem' }}>{vencText}</span>
-                                            </span>
+                                            <div className="d-flex align-items-center gap-2 me-2 flex-shrink-0">
+                                                {showCompraDate && (
+                                                    <span className="text-muted d-flex align-items-center bg-secondary bg-opacity-10 px-2 rounded" style={{ fontSize: '0.75rem' }} title="Data da Compra">
+                                                        <i className="bi bi-cart3 me-1"></i>
+                                                        {t.data}
+                                                    </span>
+                                                )}
+                                                <span className={`${vencStatusClass} d-flex align-items-center`} title={isCartao ? "Data de Vencimento" : "Data da Transação"}>
+                                                    <i className={`bi ${vencIcon} me-1`}></i>
+                                                    <span style={{ fontSize: '0.75rem' }}>{vencText}</span>
+                                                </span>
+                                            </div>
 
                                             {/* BADGES DE CATEGORIA */}
                                             <div className="d-flex gap-1 overflow-hidden" style={{ flex: 1 }}>
