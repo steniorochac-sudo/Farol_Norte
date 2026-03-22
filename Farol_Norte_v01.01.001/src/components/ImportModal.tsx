@@ -133,7 +133,7 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
 
             if (novasParaSalvar.length > 0) {
                 db.addMany(novasParaSalvar);
-                refreshData(); // 🔥 A MÁGICA DO REACT: AVISA A NUVEM QUE TEM DADO NOVO!
+                refreshData(); // 🔥 REACT: AVISA A NUVEM QUE TEM DADO NOVO.
             }
 
             alert(`✅ Concluído! \n📥 Importados: ${importedCount} \n(Ignorados ${todasTransacoes.length - importedCount} duplicados)`);

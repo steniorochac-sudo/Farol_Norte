@@ -2,16 +2,20 @@
 
 export interface Transaction {
   identificador: string;
-  data: string;           // DD/MM/YYYY
-  valor: number;          // Positivo para receita, negativo para despesa
-  nome: string;           // Descrição
+  dataVencimento?: string; 
+  dataPagamento?: string | null;  
+  data: string;           
+  valor: number;          
+  nome: string;           
   categoria: string;
-  tipo: string;           // 'Receita', 'Despesa', 'Compra no Crédito', etc.
+  tipo: string;           
+  status?: string;         //  'caixa', 'pendente', 'pago', etc.
+  tipoLancamento?: string; //  'conta', 'cartao', 'transferencia'
   account_id?: string;    
   card_id?: string;       
   parcela?: { atual: number; total: number };
-  faturaLinks?: Array<{ mes: string; valor: number }>; // Para pagamentos de fatura
-  split?: Array<{ categoria: string; valor: number }>; // Para rateios
+  faturaLinks?: Array<{ mes: string; valor: number }>; 
+  split?: Array<{ categoria: string; valor: number }>; 
   conciliado?: boolean;
   ignorarNoFluxo?: boolean;
 }

@@ -26,6 +26,9 @@ export default function Settings() {
         if (window.confirm("ATENÇÃO: Isso irá substituir todos os seus dados atuais. Continuar?")) {
             try {
                 await importarDados(fileToImport);
+                // === NOVO: FORÇA A RECALIBRAGEM DOS DADOS IMPORTADOS ===
+                localStorage.setItem('farol_db_version', '0'); 
+                // ========================================================
                 alert("Backup restaurado! Recarregando sistema...");
                 window.location.reload();
             } catch (e: any) { 
