@@ -62,7 +62,6 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                 let transacoesDoArquivo: any[] = [];
 
                 if (isPdf) {
-                    // Verificamos de forma dinâmica se o parser escolhido suporta leitura de PDF
                     if (!(strategy as any).parsePDF) {
                         throw new Error(`O modelo ${detectedBank} não suporta PDF (${file.name}).`);
                     }
@@ -71,7 +70,6 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                 } else {
                     let cleanText = await file.text();
                     
-                    // Delega a limpeza do cabeçalho ao parser específico do banco
                     if (typeof (strategy as any).preProcessText === 'function') {
                         cleanText = (strategy as any).preProcessText(cleanText);
                     }
@@ -83,6 +81,21 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                         skipEmptyLines: true, 
                         transformHeader: (h: string) => h.trim().toLowerCase()
                     });
+
+                    // === TRAVA DE SEGURANÇA: EXTRATO VS FATURA ===
+                    if (parseResult.meta && parseResult.meta.fields && parseResult.data.length > 0) {
+                        const colunas = parseResult.meta.fields.join(' ').toLowerCase();
+                        const isExtratoHeaders = colunas.includes('saldo') || colunas.includes('balance') || colunas.includes('release_date') || colunas.includes('net_amount') || colunas.includes('transaction_type');
+                        const isFaturaHeaders = colunas.includes('cartão') || colunas.includes('cartao') || colunas.includes('estabelecimento') || colunas.includes('titular');
+
+                        if (isCreditCard && isExtratoHeaders && !isFaturaHeaders) {
+                            throw new Error(`O arquivo "${file.name}" é um EXTRATO bancário, mas você selecionou a importação de FATURA. Cancele e corrija o destino.`);
+                        }
+                        if (!isCreditCard && isFaturaHeaders && !isExtratoHeaders) {
+                            throw new Error(`O arquivo "${file.name}" é uma FATURA de cartão, mas você selecionou a importação de EXTRATO. Cancele e corrija o destino.`);
+                        }
+                    }
+                    // =============================================
 
                     if (parseResult.data) {
                         transacoesDoArquivo = strategy.parse(
@@ -106,21 +119,45 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
 
             todasTransacoes.forEach(tr => {
                 tr.account_id = selectedAccountId;
+                
+                // 1. BLINDAGEM DE DATAS (Corrige YYYY-MM-DD e DD-MM-YYYY inteligentemente)
+                if (tr.data && tr.data.includes('-')) {
+                    const parts = tr.data.split('-');
+                    if (parts[0].length === 4) {
+                        tr.data = `${parts[2]}/${parts[1]}/${parts[0]}`; // Era YYYY-MM-DD
+                    } else if (parts[2].length === 4) {
+                        tr.data = `${parts[0]}/${parts[1]}/${parts[2]}`; // Era DD-MM-YYYY
+                    }
+                }
+                tr.data = tr.data?.replace(/-/g, '/');
+
+                // 2. APLICAÇÃO DA NOVA ARQUITETURA DE DADOS
                 if (isCreditCard) {
                     tr.tipoLancamento = 'cartao';
                     tr.card_id = targetId;
                     tr.status = tr.valor < 0 ? 'pendente' : 'pago';
-                    if (tr.data) {
-                        tr.idFatura = calcularIdFatura(tr.data);
+                    
+                    const cardObj = cardsDb.getAll().find(c => c.id === targetId);
+                    if (cardObj && tr.data) {
+                        const [dStr, mStr, yStr] = tr.data.split('/');
+                        const diaCompra = parseInt(dStr, 10);
+                        let mesFat = parseInt(mStr, 10);
+                        let anoFat = parseInt(yStr, 10);
+                        
+                        const fechamento = parseInt((cardObj as any).closingDay || '1', 10);
+                        const vencimento = parseInt((cardObj as any).dueDay || '10', 10);
+                        
+                        if (diaCompra >= fechamento) {
+                            mesFat++;
+                            if (mesFat > 12) { mesFat = 1; anoFat++; }
+                        }
+                        tr.dataVencimento = `${String(vencimento).padStart(2, '0')}/${String(mesFat).padStart(2, '0')}/${anoFat}`;
                     }
                 } else {
                     tr.tipoLancamento = 'conta';
-                    tr.status = 'caixa';
-                }
-
-                if (tr.data && tr.data.includes('-')) {
-                    const [y, m, d] = tr.data.split('-');
-                    tr.data = `${d}/${m}/${y}`;
+                    tr.status = 'pago'; 
+                    tr.dataVencimento = tr.data;
+                    tr.dataPagamento = tr.data;
                 }
 
                 if (tr.identificador && !existingIds.has(tr.identificador) && !novasParaSalvar.some(n => n.identificador === tr.identificador)) {
@@ -133,11 +170,11 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
 
             if (novasParaSalvar.length > 0) {
                 db.addMany(novasParaSalvar);
-                refreshData(); // 🔥 REACT: AVISA A NUVEM QUE TEM DADO NOVO.
+                refreshData(); 
             }
 
             alert(`✅ Concluído! \n📥 Importados: ${importedCount} \n(Ignorados ${todasTransacoes.length - importedCount} duplicados)`);
-            onClose(); // Fecha o modal
+            onClose(); 
             
         } catch (error: any) {
             console.error(error);

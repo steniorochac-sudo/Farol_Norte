@@ -223,8 +223,10 @@ class MercadoPagoParser implements IBankParser {
 
   parse(rows: Record<string, unknown>[], _accountId: string, _cardId?: string): ParsedRow[] {
     return rows.map((row, index) => {
-        // PapaParse converte os cabeçalhos para lowercase
-        const dataStr = row['release_date'] as string | undefined;
+        let dataStr = row['release_date'] as string | undefined;
+        // CORREÇÃO: Remove o fuso horário/hora antes de processar
+        if (dataStr) dataStr = dataStr.split(' ')[0]; 
+
         const descricao = row['transaction_type'] as string | undefined;
         const valorStr = row['transaction_net_amount'] as string | number | undefined;
 

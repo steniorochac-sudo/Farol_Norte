@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import { useFinance } from '../context/FinanceContext';
 import { formatCurrency } from '../utils/formatters';
+import { parseDateBR } from '../utils/helpers';
 import CustomSelect, { SelectOption } from '../components/CustomSelect';
 import type { Account } from '../types/index';
 
@@ -104,12 +105,41 @@ export default function Dashboard() {
     }, [transactions, selectedMonth, currentAccountId]);
 
     const kpi = useMemo(() => {
-        let receitas = 0, despesas = 0;
-        currentMonthData.forEach((t: any) => t.valor > 0 ? receitas += t.valor : despesas += Math.abs(t.valor));
+        let receitas = 0, despesas = 0, pendentes = 0;
+        
+        // 1. Cálculos do Mês Selecionado (Receitas, Despesas e Endividamento)
+        currentMonthData.forEach((t: any) => {
+            if (t.valor > 0) {
+                receitas += t.valor;
+            } else {
+                const absVal = Math.abs(t.valor);
+                despesas += absVal;
+                if (t.status !== 'pago') pendentes += absVal;
+            }
+        });
+
         const saldo = receitas - despesas;
-        const economia = receitas > 0 ? ((saldo / receitas) * 100).toFixed(1) : 0;
-        return { receitas, despesas, saldo, economia };
-    }, [currentMonthData]);
+        const economia = receitas > 0 ? ((saldo / receitas) * 100).toFixed(1) : "0.0";
+        // Taxa de Endividamento = O quanto da sua receita já está comprometido com dívidas em aberto
+        const endividamento = receitas > 0 ? ((pendentes / receitas) * 100).toFixed(1) : (pendentes > 0 ? "100+" : "0.0");
+
+        // 2. Cálculo Global de Atrasos (Varre todo o histórico, independente do mês filtrado)
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        let atrasadas = 0;
+
+        transactions.forEach((t: any) => {
+            if (currentAccountId !== "all" && t.account_id !== currentAccountId) return;
+            if (t.valor >= 0 || t.tipo === "Pagamento de Fatura" || t.status === 'pago') return;
+            
+            const venc = parseDateBR(t.dataVencimento || t.data);
+            if (venc && venc < hoje) {
+                atrasadas += Math.abs(t.valor);
+            }
+        });
+
+        return { receitas, despesas, saldo, economia, pendentes, endividamento, atrasadas };
+    }, [currentMonthData, transactions, currentAccountId]);
 
     const handleMonthChange = (novoMes: string) => {
         setSelectedMonth(novoMes);
@@ -494,37 +524,70 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* KPI CARDS */}
+            {/* KPI CARDS (Layout Expandido para Novos Indicadores) */}
             <div className="row g-3 mb-4">
-                <div className="col-6 col-md-3">
+                {/* Linha 1: Fluxo de Caixa */}
+                <div className="col-12 col-md-4">
                     <div className="theme-surface border-start border-4 border-success shadow-sm h-100 py-2 radius-12">
-                        <div className="card-body px-3 py-2 text-center text-md-start">
-                            <div className="text-uppercase text-success fw-bold small">Receitas</div>
-                            <div className="h5 mb-0 fw-bold text-light">{formatCurrency(kpi.receitas)}</div>
+                        <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div className="text-uppercase text-success fw-bold small">Receitas</div>
+                                <div className="h4 mb-0 fw-bold text-light">{formatCurrency(kpi.receitas)}</div>
+                            </div>
+                            <i className="bi bi-arrow-up-circle fs-1 text-success opacity-25"></i>
                         </div>
                     </div>
                 </div>
-                <div className="col-6 col-md-3">
+                <div className="col-12 col-md-4">
                     <div className="theme-surface border-start border-4 border-danger shadow-sm h-100 py-2 radius-12">
-                        <div className="card-body px-3 py-2 text-center text-md-start">
-                            <div className="text-uppercase text-danger fw-bold small">Despesas</div>
-                            <div className="h5 mb-0 fw-bold text-light">{formatCurrency(kpi.despesas)}</div>
+                        <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div className="text-uppercase text-danger fw-bold small">Despesas</div>
+                                <div className="h4 mb-0 fw-bold text-light">{formatCurrency(kpi.despesas)}</div>
+                            </div>
+                            <i className="bi bi-arrow-down-circle fs-1 text-danger opacity-25"></i>
                         </div>
                     </div>
                 </div>
-                <div className="col-6 col-md-3">
-                    <div className="theme-surface border-start border-4 border-warning shadow-sm h-100 py-2 radius-12">
-                        <div className="card-body px-3 py-2 text-center text-md-start">
-                            <div className="text-uppercase text-warning fw-bold small">Saldo</div>
-                            <div className="h5 mb-0 fw-bold text-light">{formatCurrency(kpi.saldo)}</div>
-                        </div>
-                    </div>
-                </div>
-                <div className="col-6 col-md-3">
+                <div className="col-12 col-md-4">
                     <div className="theme-surface border-start border-4 border-info shadow-sm h-100 py-2 radius-12">
-                        <div className="card-body px-3 py-2 text-center text-md-start">
-                            <div className="text-uppercase text-info fw-bold small">Economia</div>
-                            <div className="h5 mb-0 fw-bold text-light">{kpi.economia}%</div>
+                        <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div className="text-uppercase text-info fw-bold small">Saldo do Mês</div>
+                                <div className="h4 mb-0 fw-bold text-light">{formatCurrency(kpi.saldo)}</div>
+                            </div>
+                            <i className="bi bi-piggy-bank fs-1 text-info opacity-25"></i>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Linha 2: Indicadores de Endividamento e Alertas */}
+                <div className="col-12 col-md-6">
+                    <div className={`theme-surface border-start border-4 ${kpi.atrasadas > 0 ? 'border-danger bg-danger bg-opacity-10' : 'border-secondary'} shadow-sm h-100 py-2 radius-12`}>
+                        <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div className={`text-uppercase fw-bold small ${kpi.atrasadas > 0 ? 'text-danger' : 'text-muted'}`}>
+                                    {kpi.atrasadas > 0 ? 'Contas Atrasadas' : 'Tudo em Dia'}
+                                </div>
+                                <div className={`h4 mb-0 fw-bold ${kpi.atrasadas > 0 ? 'text-danger' : 'text-light'}`}>
+                                    {kpi.atrasadas > 0 ? formatCurrency(kpi.atrasadas) : 'Nenhum atraso'}
+                                </div>
+                            </div>
+                            <i className={`bi ${kpi.atrasadas > 0 ? 'bi-exclamation-triangle-fill text-danger' : 'bi-check-circle-fill text-muted'} fs-1 opacity-25`}></i>
+                        </div>
+                    </div>
+                </div>
+                <div className="col-12 col-md-6">
+                    <div className="theme-surface border-start border-4 border-warning shadow-sm h-100 py-2 radius-12">
+                        <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div className="text-uppercase text-warning fw-bold small">Renda Comprometida</div>
+                                <div className="h4 mb-0 fw-bold text-light">
+                                    {kpi.endividamento}% 
+                                    <span className="fs-6 fw-normal text-muted ms-2 d-none d-md-inline">({formatCurrency(kpi.pendentes)} em aberto)</span>
+                                </div>
+                            </div>
+                            <i className="bi bi-pie-chart fs-1 text-warning opacity-25"></i>
                         </div>
                     </div>
                 </div>
