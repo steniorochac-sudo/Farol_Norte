@@ -3,65 +3,36 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { formatCurrency } from '../utils/formatters';
 import { parseDateBR, generateUUID } from '../utils/helpers';
-import { db } from '../services/DataService';
-import ImportModal from '../components/ImportModal'; // Assumindo que ainda está em .jsx ou já migrado
-import CustomSelect, { SelectOption } from '../components/CustomSelect';
-import type { Transaction, Account, Category } from '../types/index';
-
-// =========================================================
-// INTERFACES LOCAIS (Para os Modais)
-// =========================================================
-interface TransactionEditModalProps {
-    transaction: Transaction | null;
-    onClose: () => void;
-    accounts: Account[];
-    categories: Category[];
-    refreshData: () => void;
-}
-
-interface MassSplitModalProps {
-    selectedIds: Set<string>;
-    categories: Category[];
-    onClose: () => void;
-    refreshData: () => void;
-}
-
-interface SplitItem {
-    categoria: string;
-    valor: string | number;
-}
-
-interface MassSplitItem {
-    categoria: string;
-    pct: string | number;
-}
+import { db, cardsDb } from '../services/DataService';
+import ImportModal from '../components/ImportModal'; 
+import CustomSelect from '../components/CustomSelect';
 
 export default function Transactions() {
     const { 
         transactions = [], 
         accounts = [], 
         categories = [], 
-        currentAccountId = 'all', 
-        changeAccount = () => {}, 
-        refreshData = () => {} 
-    } = useFinance();
+        currentAccountId, 
+        changeAccount, 
+        refreshData 
+    } = useFinance() || {};
 
     // ==========================================
     // 1. ESTADOS DE INTERFACE E FILTROS
     // ==========================================
-    const [showImportModal, setShowImportModal] = useState<boolean>(false);
+    const [showImportModal, setShowImportModal] = useState(false);
 
-    const [searchTerm, setSearchTerm] = useState<string>(() => localStorage.getItem('transactions_search_pref') || '');
-    const [selectedMonth, setSelectedMonth] = useState<string>(() => localStorage.getItem('transactions_period_pref') || new Date().toISOString().slice(0, 7));
-    const [selectedCategory, setSelectedCategory] = useState<string>(() => localStorage.getItem('transactions_category_pref') || 'all');
-    const [selectedType, setSelectedType] = useState<string>(() => localStorage.getItem('transactions_type_pref') || 'all');
+    const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('transactions_search_pref') || '');
+    const [selectedMonth, setSelectedMonth] = useState(() => localStorage.getItem('transactions_period_pref') || new Date().toISOString().slice(0, 7));
+    const [selectedCategory, setSelectedCategory] = useState(() => localStorage.getItem('transactions_category_pref') || 'all');
+    const [selectedType, setSelectedType] = useState(() => localStorage.getItem('transactions_type_pref') || 'all');
 
-    const [currentPage, setCurrentPage] = useState<number>(1);
+    const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 50;
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [selectedIds, setSelectedIds] = useState(new Set());
 
-    const [modalEdit, setModalEdit] = useState<{ show: boolean; transaction: Transaction | null }>({ show: false, transaction: null });
-    const [modalMassSplit, setModalMassSplit] = useState<{ show: boolean }>({ show: false });
+    const [modalEdit, setModalEdit] = useState({ show: false, transaction: null });
+    const [modalMassSplit, setModalMassSplit] = useState({ show: false });
 
     useEffect(() => {
         localStorage.setItem('transactions_search_pref', searchTerm);
@@ -76,8 +47,8 @@ export default function Transactions() {
     // 2. MOTOR DE FILTRAGEM (USEMEMO)
     // ==========================================
     const availableMonths = useMemo(() => {
-        const months = new Set<string>();
-        transactions.forEach(t => {
+        const months = new Set();
+        transactions.forEach((t: any) => {
             if (t.data) {
                 const parts = t.data.split('/');
                 if (parts.length === 3) months.add(`${parts[2]}-${parts[1]}`);
@@ -89,10 +60,9 @@ export default function Transactions() {
     }, [transactions]);
 
     const filteredTransactions = useMemo(() => {
-        return transactions.filter(t => {
+        return transactions.filter((t: any) => {
             if (currentAccountId !== 'all' && t.account_id !== currentAccountId) return false;
-            // Usamos casting dinâmico caso tipoLancamento venha do JS legado
-            if (selectedType !== 'all' && (t as any).tipoLancamento !== selectedType) return false;
+            if (selectedType !== 'all' && t.tipoLancamento !== selectedType) return false;
 
             if (selectedMonth !== 'all') {
                 const parts = t.data?.split('/');
@@ -108,7 +78,7 @@ export default function Transactions() {
                 let match = false;
                 if (t.categoria === selectedCategory) match = true;
                 if (!match && t.split && t.split.length > 0) {
-                    if (t.split.some(part => part.categoria === selectedCategory)) match = true;
+                    if (t.split.some((part: any) => part.categoria === selectedCategory)) match = true;
                 }
                 if (!match) return false;
             }
@@ -119,13 +89,13 @@ export default function Transactions() {
                 const matchCat = (t.categoria || '').toLowerCase().includes(term);
                 let matchSplit = false;
                 if (t.split) {
-                    matchSplit = t.split.some(part => part.categoria.toLowerCase().includes(term));
+                    matchSplit = t.split.some((part: any) => part.categoria.toLowerCase().includes(term));
                 }
                 if (!matchNome && !matchCat && !matchSplit) return false;
             }
 
             return true;
-        }).sort((a, b) => {
+        }).sort((a: any, b: any) => {
             const dateA = parseDateBR(a.data);
             const dateB = parseDateBR(b.data);
             if (!dateA && !dateB) return 0;
@@ -139,17 +109,22 @@ export default function Transactions() {
         if (selectedMonth === 'all') return;
         const idx = availableMonths.indexOf(selectedMonth) + dir;
         if (idx >= 0 && idx < availableMonths.length) {
-            setSelectedMonth(availableMonths[idx]);
+            setSelectedMonth(availableMonths[idx] as string);
         }
     };
 
+    // MOTOR DE KPIs BLINDADO (Ignora Pagamentos de Fatura)
     const summary = useMemo(() => {
-        return filteredTransactions.reduce((acc, t) => {
-            if (t.tipo === 'Pagamento de Fatura') return acc;
+        return filteredTransactions.reduce((acc, t: any) => {
+            const descLower = (t.nome || '').toLowerCase();
+            const isFaturaByDesc = (t.tipoLancamento === 'conta' || !t.tipoLancamento) && t.valor < 0 && (descLower.includes('pagamento fatura') || descLower.includes('pgto fatura') || descLower.includes('pagamento de fatura'));
+            const isPagamento = t.tipo === 'Pagamento de Fatura' || t.categoria === 'Pagamento de Fatura' || !!t.ignorarNoFluxo || isFaturaByDesc;
+
+            if (isPagamento) return acc;
 
             let valorConsiderado = t.valor;
             if (selectedCategory !== 'all' && selectedCategory !== 'NULL_CAT' && t.split) {
-                const part = t.split.find(s => s.categoria === selectedCategory);
+                const part = t.split.find((s: any) => s.categoria === selectedCategory);
                 if (part) valorConsiderado = part.valor;
             }
 
@@ -172,9 +147,9 @@ export default function Transactions() {
         setSelectedIds(newSet);
     };
 
-    const toggleAllPage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const toggleAllPage = (e: any) => {
         const newSet = new Set(selectedIds);
-        paginatedTransactions.forEach(t => {
+        paginatedTransactions.forEach((t: any) => {
             if (e.target.checked) newSet.add(t.identificador);
             else newSet.delete(t.identificador);
         });
@@ -183,7 +158,7 @@ export default function Transactions() {
 
     const handleMassDelete = () => {
         if (!window.confirm(`🔴 PERIGO: Excluir ${selectedIds.size} transações permanentemente?`)) return;
-        const allT = db.getAll().filter(t => !selectedIds.has(t.identificador));
+        const allT = db.getAll().filter((t: any) => !selectedIds.has(t.identificador));
         db.save(allT);
         refreshData();
         setSelectedIds(new Set());
@@ -194,12 +169,11 @@ export default function Transactions() {
         if (!window.confirm(`Classificar ${selectedIds.size} itens como "${novaCategoria}"?`)) return;
 
         const allT = db.getAll();
-        allT.forEach(t => {
+        allT.forEach((t: any) => {
             if (selectedIds.has(t.identificador)) {
-                // NOVA TRAVA DE SEGURANÇA AQUI:
-                if (t.tipo === 'Pagamento de Fatura') return; 
-                
+                if (t.tipo === 'Pagamento de Fatura' && novaCategoria !== 'Pagamento de Fatura') return; 
                 t.categoria = novaCategoria;
+                if (novaCategoria === 'Pagamento de Fatura') t.tipo = 'Pagamento de Fatura';
                 delete t.split;
             }
         });
@@ -211,39 +185,39 @@ export default function Transactions() {
     // ==========================================
     // PREPARAÇÃO DE OPÇÕES PARA OS CUSTOM SELECTS
     // ==========================================
-    const accountOptions: SelectOption[] = [
+    const accountOptions = [
         { value: 'all', label: '🏦 Todas as Contas' },
-        ...accounts.map(acc => ({ value: acc.id, label: acc.nome }))
+        ...accounts.map((acc: any) => ({ value: acc.id, label: acc.nome }))
     ];
 
-    const monthOptions: SelectOption[] = [
+    const monthOptions = [
         { value: 'all', label: '📅 Histórico Todo' },
         { value: 'disabled', label: '---', disabled: true },
-        ...availableMonths.map(mesAno => {
+        ...availableMonths.map((mesAno: any) => {
             const [ano, mes] = mesAno.split('-');
-            const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
+            const dateObj = new Date(ano, mes - 1, 1);
             const nomeMes = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
             return { value: mesAno, label: nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1) };
         })
     ];
 
-    const categoryOptions: SelectOption[] = [
+    const categoryOptions = [
         { value: 'all', label: '🏷️ Todas Categorias' },
         { value: 'NULL_CAT', label: '⚠️ Sem Classificação' },
         { value: 'disabled', label: '---', disabled: true },
-        ...categories.map(cat => ({ value: cat.nome, label: cat.nome }))
+        ...categories.map((cat: any) => ({ value: cat.nome, label: cat.nome }))
     ];
 
-    const typeOptions: SelectOption[] = [
+    const typeOptions = [
         { value: 'all', label: '💳 Todos os Tipos' },
         { value: 'conta', label: 'Débito / Pix' },
         { value: 'cartao', label: 'Cartão de Crédito' }
     ];
 
-    const massCategoryOptions: SelectOption[] = [
+    const massCategoryOptions = [
         { value: '', label: 'Classificar como...' },
         { value: 'disabled', label: '---', disabled: true },
-        ...categories.map(cat => ({ value: cat.nome, label: cat.nome }))
+        ...categories.map((cat: any) => ({ value: cat.nome, label: cat.nome }))
     ];
 
     // ==========================================
@@ -325,7 +299,7 @@ export default function Transactions() {
                     <div className="list-group-item bg-transparent border-bottom border-secondary border-opacity-50 d-flex align-items-center py-3">
                         <div className="form-check m-0">
                             <input className="form-check-input bg-transparent border-secondary" type="checkbox"
-                                checked={paginatedTransactions.length > 0 && paginatedTransactions.every(t => selectedIds.has(t.identificador))}
+                                checked={paginatedTransactions.length > 0 && paginatedTransactions.every((t: any) => selectedIds.has(t.identificador))}
                                 onChange={toggleAllPage} style={{ cursor: 'pointer' }} />
                         </div>
                         <span className="ms-2 small fw-bold text-warning text-uppercase">Selecionar Página</span>
@@ -334,60 +308,172 @@ export default function Transactions() {
                     {paginatedTransactions.length === 0 ? (
                         <div className="text-center p-5 text-muted">Nenhuma transação encontrada.</div>
                     ) : (
-                        paginatedTransactions.map(t => {
+                        paginatedTransactions.map((t: any) => {
                             let valorDisplay = t.valor;
                             let isPartial = false;
                             if (selectedCategory !== 'all' && selectedCategory !== 'NULL_CAT' && t.split) {
-                                const part = t.split.find(s => s.categoria === selectedCategory);
+                                const part = t.split.find((s: any) => s.categoria === selectedCategory);
                                 if (part) { valorDisplay = part.valor; isPartial = true; }
                             }
 
                             const isSelected = selectedIds.has(t.identificador);
                             const isPositive = valorDisplay >= 0;
-                            const isPagamento = t.tipo === 'Pagamento de Fatura';
+                            const isCartao = t.tipoLancamento === 'cartao' || !!t.card_id;
+                            const isPago = t.status === 'pago';
+                            
+                            const descLower = (t.nome || '').toLowerCase();
+                            const isFaturaByDesc = (t.tipoLancamento === 'conta' || !t.tipoLancamento) && t.valor < 0 && (descLower.includes('pagamento fatura') || descLower.includes('pgto fatura') || descLower.includes('pagamento de fatura'));
+                            const isPagamento = t.tipo === 'Pagamento de Fatura' || t.categoria === 'Pagamento de Fatura' || !!t.ignorarNoFluxo || isFaturaByDesc;
+
+                            let vencStatusClass = "text-muted opacity-75";
+                            let vencIcon = "bi-calendar-event opacity-75";
+                            let vencText = t.data;
+                            let showCompraDate = false;
+
+                            const hoje = new Date();
+                            hoje.setHours(0, 0, 0, 0);
+
+                            if (isCartao) {
+                                showCompraDate = true;
+                                let finalVencimento = t.dataVencimento;
+                                const isVencimentoValido = finalVencimento && finalVencimento !== 'undefined' && finalVencimento !== 'NaN' && finalVencimento !== 'null';
+                                
+                                if (!isVencimentoValido && t.data) {
+                                    const cards = cardsDb.getAll();
+                                    const card = cards.find(c => c.id === t.card_id || c.id === t.account_id);
+                                    if (card) {
+                                        const [dStr, mStr, yStr] = t.data.split('/');
+                                        const diaCompra = parseInt(dStr, 10);
+                                        let mesFatura = parseInt(mStr, 10);
+                                        let anoFatura = parseInt(yStr, 10);
+                                        
+                                        const fechamento = parseInt((card as any).closingDay || (card as any).diaFechamento || '1', 10);
+                                        const vencimento = parseInt((card as any).dueDay || (card as any).diaVencimento || '10', 10);
+                                        
+                                        if (diaCompra >= fechamento) {
+                                            mesFatura++;
+                                            if (mesFatura > 12) { mesFatura = 1; anoFatura++; }
+                                        }
+                                        finalVencimento = `${String(vencimento).padStart(2, '0')}/${String(mesFatura).padStart(2, '0')}/${anoFatura}`;
+                                    } else {
+                                        finalVencimento = t.data;
+                                    }
+                                }
+
+                                const dataRef = finalVencimento || t.data;
+                                const vencDate = parseDateBR(dataRef);
+
+                                if (isPago) {
+                                    vencStatusClass = "text-muted opacity-75";
+                                    vencIcon = "bi-check-circle-fill text-success opacity-75";
+                                    vencText = `Fatura Paga (${dataRef})`;
+                                } else if (vencDate) {
+                                    if (vencDate < hoje) {
+                                        vencStatusClass = "text-danger fw-bold bg-danger bg-opacity-10 px-2 rounded";
+                                        vencIcon = "bi-exclamation-circle-fill text-danger";
+                                        vencText = `Venc: ${dataRef} (Atrasado)`;
+                                    } else if (vencDate.getTime() === hoje.getTime()) {
+                                        vencStatusClass = "text-warning fw-bold bg-warning bg-opacity-10 px-2 rounded";
+                                        vencIcon = "bi-clock-fill text-warning";
+                                        vencText = `Vence Hoje: ${dataRef}`;
+                                    } else {
+                                        vencStatusClass = "text-info";
+                                        vencIcon = "bi-calendar-event";
+                                        vencText = `Venc: ${dataRef}`;
+                                    }
+                                } else {
+                                    vencStatusClass = "text-warning";
+                                    vencIcon = "bi-exclamation-triangle";
+                                    vencText = `Vencimento Indisponível`;
+                                }
+                            }
 
                             return (
                                 <div key={t.identificador} className={`list-group-item bg-transparent d-flex align-items-center gap-3 py-3 px-3 border-bottom border-secondary border-opacity-25 hover-opacity ${isSelected ? 'bg-primary bg-opacity-25' : ''}`} style={{ borderLeft: isSelected ? '4px solid var(--farol-glow)' : '1px solid transparent' }}>
-                                    <div className="form-check m-0 flex-shrink-0">
+                                    
+                                    {/* 1. CHECKBOX */}
+                                    <div className="form-check m-0 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                         <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSelected} onChange={() => toggleSelection(t.identificador)} style={{ cursor: 'pointer', transform: 'scale(1.2)' }} />
                                     </div>
-                                    
-                                    <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '40px', height: '40px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                                        <i className={`bi fs-5 ${(t as any).tipoLancamento === 'cartao' ? 'bi-credit-card text-warning' : 'bi-bank text-success'}`}></i>
-                                    </div>
 
-                                    <div className="flex-grow-1 cursor-pointer" style={{ minWidth: 0 }} onClick={() => setModalEdit({ show: true, transaction: t })}>
-                                        <div className="d-flex justify-content-between align-items-center gap-2">
-                                            <div className="fw-bold text-light text-truncate" title={t.nome} style={{ flex: 1 }}>
-                                                {t.nome}
-                                            </div>
-                                            <div className={`fw-bold text-nowrap flex-shrink-0 ${isPositive ? 'text-success' : 'text-danger'}`}>
-                                                {isPartial && <i className="bi bi-pie-chart-fill text-warning me-1" title="Valor rateado"></i>}
-                                                {formatCurrency(valorDisplay)}
-                                            </div>
+                                    {/* 7. ÁREA CLICÁVEL COM ÍCONES E TEXTO */}
+                                    <div className="d-flex flex-grow-1 align-items-center gap-3 cursor-pointer" style={{ minWidth: 0 }} onClick={() => setModalEdit({ show: true, transaction: t as any })}>
+                                        
+                                        {/* 2. ÍCONES DINÂMICOS (Verde, Vermelho ou Amarelo) */}
+                                        <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '40px', height: '40px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
+                                            <i className={`bi fs-5 ${isCartao ? 'bi-credit-card text-warning' : (isPositive ? 'bi-bank text-success' : 'bi-bank text-danger')}`}></i>
                                         </div>
 
-                                        <div className="d-flex align-items-center mt-1 small" style={{ minWidth: 0 }}>
-                                            <span className="text-muted me-2 flex-shrink-0">{t.data}</span>
+                                        <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                                            <div className="d-flex justify-content-between align-items-center gap-2">
+                                                {/* 3. DESCRIÇÃO */}
+                                                <div className="fw-bold text-light text-truncate" title={t.nome} style={{ flex: 1 }}>
+                                                    {t.nome}
+                                                </div>
+                                                {/* 5. VALOR */}
+                                                <div className={`fw-bold text-nowrap flex-shrink-0 ${isPositive ? 'text-success' : 'text-danger'}`}>
+                                                    {isPartial && <i className="bi bi-pie-chart-fill text-warning me-1" title="Valor rateado"></i>}
+                                                    {formatCurrency(valorDisplay)}
+                                                </div>
+                                            </div>
 
-                                            <div className="d-flex gap-1 overflow-hidden" style={{ flex: 1 }}>
-                                                {t.split && t.split.length > 0 ? (
-                                                    t.split.map((p, idx) => (
-                                                        <span key={idx} className={`badge ${p.categoria === selectedCategory ? 'bg-warning text-dark' : 'bg-transparent text-muted border border-secondary border-opacity-50'}`} style={{ fontSize: '0.7rem' }}>
-                                                            {p.categoria}
+                                            {/* LINHA DE DATAS E TAGS (Responsiva) */}
+                                            <div className="d-flex flex-wrap align-items-center mt-2 gap-2 small" style={{ minWidth: 0 }}>
+                                                
+                                                {/* 4. LEGENDA DUPLA DE DATAS */}
+                                                <div className="d-flex flex-wrap align-items-center gap-2 flex-shrink-0">
+                                                    {showCompraDate && (
+                                                        <span className="text-muted d-flex align-items-center bg-secondary bg-opacity-10 px-2 rounded" style={{ fontSize: '0.75rem' }} title="Data da Compra">
+                                                            <i className="bi bi-cart3 me-1"></i>
+                                                            <span className="d-md-none">{t.data.substring(0, 5)}</span>
+                                                            <span className="d-none d-md-inline">{t.data}</span>
                                                         </span>
-                                                    ))
-                                                ) : (
-                                                    <span className={`badge ${t.categoria && t.categoria !== 'Não classificada' ? 'bg-transparent text-muted border border-secondary border-opacity-50' : 'bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50'}`} style={{ fontSize: '0.7rem' }}>
-                                                        {t.categoria || 'Não classificada'}
+                                                    )}
+                                                    <span className={`${vencStatusClass} d-flex align-items-center`} title={isCartao ? "Data de Vencimento" : "Data da Transação"}>
+                                                        <i className={`bi ${vencIcon} me-1`}></i>
+                                                        <span style={{ fontSize: '0.75rem' }}>{vencText}</span>
                                                     </span>
-                                                )}
-                                            </div>
+                                                </div>
 
-                                            {isPagamento && <span className="badge bg-info bg-opacity-25 text-info border border-info border-opacity-50 ms-2 flex-shrink-0" style={{ fontSize: '0.7rem' }}>Pagamento</span>}
+                                                {/* 6. TAGS DE CATEGORIA E STATUS */}
+                                                <div className="d-flex flex-wrap gap-1" style={{ flex: '1 1 auto', minWidth: '80px' }}>
+                                                    {t.split && t.split.length > 0 ? (
+                                                        t.split.map((p: any, idx: number) => (
+                                                            <span key={idx} className={`badge ${p.categoria === selectedCategory ? 'bg-warning text-dark' : 'bg-transparent text-muted border border-secondary border-opacity-50'}`} style={{ fontSize: '0.7rem' }}>
+                                                                {p.categoria}
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span className={`badge ${t.categoria && t.categoria !== 'Não classificada' ? 'bg-transparent text-muted border border-secondary border-opacity-50' : 'bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50'}`} style={{ fontSize: '0.7rem' }}>
+                                                            {t.categoria || 'Não classificada'}
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div className="ms-auto flex-shrink-0">
+                                                    {isPagamento && <span className="badge bg-info bg-opacity-25 text-info border border-info border-opacity-50" style={{ fontSize: '0.7rem' }}>Pagamento</span>}
+                                                    
+                                                    {!isPositive && !isPagamento && (
+                                                        <>
+                                                            {!isCartao ? (
+                                                                <span className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50" style={{ fontSize: '0.7rem' }}><i className="bi bi-check2-all me-1"></i>Pago</span>
+                                                            ) : (
+                                                                isPago ? (
+                                                                    <span className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50" style={{ fontSize: '0.7rem' }}><i className="bi bi-check2-all me-1"></i>Pago</span>
+                                                                ) : (
+                                                                    (parseDateBR(t.dataVencimento || t.data) && parseDateBR(t.dataVencimento || t.data)! < hoje) ? (
+                                                                        <span className="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50" style={{ fontSize: '0.7rem' }}><i className="bi bi-exclamation-triangle-fill me-1"></i>Pendente</span>
+                                                                    ) : (
+                                                                        <span className="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-50" style={{ fontSize: '0.7rem' }}>Na Fatura</span>
+                                                                    )
+                                                                )
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <button className="btn btn-sm btn-outline-secondary border-0 text-white-50 d-none d-md-block flex-shrink-0" onClick={() => setModalEdit({ show: true, transaction: t })}><i className="bi bi-pencil"></i></button>
                                 </div>
                             );
                         })
@@ -419,9 +505,7 @@ export default function Transactions() {
                 </div>
             )}
             
-            {/* O Modal de Importação ainda precisa ser migrado para TSX, se acusar erro, ignore por enquanto */}
             <ImportModal show={showImportModal} onClose={() => setShowImportModal(false)} />
-            
             {modalEdit.show && <TransactionEditModal transaction={modalEdit.transaction} onClose={() => setModalEdit({ show: false, transaction: null })} accounts={accounts} categories={categories} refreshData={refreshData} />}
             {modalMassSplit.show && <MassSplitModal selectedIds={selectedIds} categories={categories} onClose={() => { setModalMassSplit({ show: false }); setSelectedIds(new Set()); }} refreshData={refreshData} />}
         </div>
@@ -431,27 +515,24 @@ export default function Transactions() {
 // =========================================================
 // SUB-COMPONENTE: MODAL DE EDIÇÃO E CRIAÇÃO (COM RATEIO)
 // =========================================================
-function TransactionEditModal({ transaction, onClose, accounts, categories, refreshData }: TransactionEditModalProps) {
+function TransactionEditModal({ transaction, onClose, accounts, categories, refreshData }: any) {
     const isNew = !transaction;
-    const isFatura = !isNew && transaction?.tipo === 'Pagamento de Fatura';
 
-    const [desc, setDesc] = useState<string>(isNew ? '' : (transaction?.nome || ''));
-    const [valorVisual, setValorVisual] = useState<string>(isNew ? '' : Math.abs(transaction?.valor || 0).toString());
-    const [dataIso, setDataIso] = useState<string>(() => {
-        if (isNew || !transaction?.data) return new Date().toISOString().split('T')[0];
+    const [desc, setDesc] = useState(isNew ? '' : (transaction.nome || ''));
+    const [valorVisual, setValorVisual] = useState(isNew ? '' : Math.abs(transaction.valor || 0).toString());
+    const [dataIso, setDataIso] = useState(() => {
+        if (isNew || !transaction.data) return new Date().toISOString().split('T')[0];
         const [d, m, y] = transaction.data.split('/');
         return `${y}-${m}-${d}`;
     });
-    const [accountId, setAccountId] = useState<string>(isNew ? (accounts[0]?.id || '') : (transaction?.account_id || ''));
-    const [isReceita, setIsReceita] = useState<boolean>(isNew ? false : ((transaction?.valor || 0) >= 0));
+    const [accountId, setAccountId] = useState(isNew ? (accounts[0]?.id || '') : (transaction.account_id || ''));
+    const [isReceita, setIsReceita] = useState(isNew ? false : (transaction.valor >= 0));
 
-    const [isSplit, setIsSplit] = useState<boolean>(!isNew && !!transaction?.split && transaction.split.length > 0);
-    const [singleCategory, setSingleCategory] = useState<string>(isNew ? 'Não classificada' : (transaction?.categoria || 'Não classificada'));
-    
-    // Tipagem da fatia de rateio
-    const [splits, setSplits] = useState<SplitItem[]>(!isNew && transaction?.split ? transaction.split.map(s => ({ ...s, valor: Math.abs(s.valor || 0) })) : []);
+    const [isSplit, setIsSplit] = useState(!isNew && transaction.split && transaction.split.length > 0);
+    const [singleCategory, setSingleCategory] = useState(isNew ? 'Não classificada' : (transaction.categoria || 'Não classificada'));
+    const [splits, setSplits] = useState(!isNew && transaction.split ? transaction.split.map((s: any) => ({ ...s, valor: Math.abs(s.valor || 0) })) : []);
 
-    const handleSave = (e: React.FormEvent) => {
+    const handleSave = (e: any) => {
         e.preventDefault();
         const multiplier = isReceita ? 1 : -1;
         const valorFinalVisual = parseFloat(valorVisual);
@@ -461,23 +542,30 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
         const [y, m, d] = dataIso.split('-');
         const dataBR = `${d}/${m}/${y}`;
 
-        // Casting temporário devido a atributos flexíveis não declarados estritamente
+        // Sincroniza o tipo se classificado manualmente
+        let finalTipo = isNew ? (isReceita ? 'Receita Manual' : 'Despesa Manual') : transaction?.tipo || '';
+        if (singleCategory === 'Pagamento de Fatura') finalTipo = 'Pagamento de Fatura';
+
+        const isCartao = cardsDb.getAll().some(c => c.id === accountId);
+
         let finalTransaction: any = {
-            identificador: isNew ? `manual-${generateUUID()}` : transaction?.identificador,
+            identificador: isNew ? `manual-${generateUUID()}` : transaction.identificador,
             data: dataBR,
+            dataVencimento: isNew ? dataBR : (transaction.dataVencimento || dataBR),
+            dataPagamento: isNew ? dataBR : (transaction.dataPagamento || dataBR),
             nome: desc,
             valor: valorFinalVisual * multiplier,
             account_id: accountId,
-            tipoLancamento: isNew ? 'conta' : (transaction as any)?.tipoLancamento,
-            status: isNew ? 'caixa' : (transaction as any)?.status,
-            tipo: isNew ? (isReceita ? 'Receita Manual' : 'Despesa Manual') : transaction?.tipo
+            tipoLancamento: isNew ? (isCartao ? 'cartao' : 'conta') : transaction.tipoLancamento,
+            status: isNew ? (isCartao ? 'pendente' : 'pago') : transaction.status,
+            tipo: finalTipo
         };
 
         if (isSplit) {
             let somaFatias = 0;
-            const splitFinal = splits.map(s => {
-                somaFatias += parseFloat(s.valor as string || '0');
-                return { categoria: s.categoria || 'Não classificada', valor: parseFloat(s.valor as string || '0') * multiplier };
+            const splitFinal = splits.map((s: any) => {
+                somaFatias += parseFloat(s.valor || 0);
+                return { categoria: s.categoria || 'Não classificada', valor: parseFloat(s.valor || 0) * multiplier };
             });
 
             if (Math.abs(somaFatias - valorFinalVisual) > 0.02) {
@@ -492,9 +580,9 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 
         const allT = db.getAll();
         if (isNew) {
-            allT.push(finalTransaction as Transaction);
+            allT.push(finalTransaction);
         } else {
-            const idx = allT.findIndex(t => t.identificador === transaction?.identificador);
+            const idx = allT.findIndex((t: any) => t.identificador === transaction.identificador);
             if (idx > -1) allT[idx] = { ...allT[idx], ...finalTransaction };
         }
 
@@ -503,18 +591,17 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
         onClose();
     };
 
-    const accountOptions: SelectOption[] = accounts.map(a => ({ value: a.id, label: a.nome }));
-    const categoryOptions: SelectOption[] = [
+    const accountOptions = accounts.map((a: any) => ({ value: a.id, label: a.nome }));
+    const categoryOptions = [
         { value: 'Não classificada', label: 'Sem Categoria' },
         { value: 'disabled', label: '---', disabled: true },
-        ...categories.map(c => ({ value: c.nome, label: c.nome }))
+        ...categories.map((c: any) => ({ value: c.nome, label: c.nome }))
     ];
 
-    const isAccountDisabled = !isNew && (transaction as any)?.tipoLancamento === 'cartao';
+    const isAccountDisabled = !isNew && transaction.tipoLancamento === 'cartao';
 
     return (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1060 }}>
-            {/* O HTML/JSX do modal permanece exatamente o mesmo, mantendo sua UI intacta */}
             <div className="modal-dialog modal-lg">
                 <div className="modal-content theme-surface shadow-lg">
                     <form onSubmit={handleSave}>
@@ -559,28 +646,27 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 
                             <hr className="border-secondary border-opacity-25 my-4" />
 
-                            <div className="form-check form-switch mb-4" style={{ opacity: isFatura ? 0.5 : 1 }}>
-                                <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSplit} onChange={e => !isFatura && setIsSplit(e.target.checked)} disabled={isFatura} style={{cursor: isFatura ? 'not-allowed' : 'pointer'}} />
-                                <label className="form-check-label fw-bold text-light" style={{cursor: isFatura ? 'not-allowed' : 'pointer'}}><i className="bi bi-pie-chart-fill text-warning me-2"></i>Dividir em Múltiplas Categorias (Rateio)</label>
+                            <div className="form-check form-switch mb-4">
+                                <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSplit} onChange={e => setIsSplit(e.target.checked)} style={{cursor: 'pointer'}} />
+                                <label className="form-check-label fw-bold text-light" style={{cursor: 'pointer'}}><i className="bi bi-pie-chart-fill text-warning me-2"></i>Dividir em Múltiplas Categorias (Rateio)</label>
                             </div>
 
                             {!isSplit ? (
                                 <div className="mb-3 bg-white theme-surface bg-opacity-5 p-4 rounded-4 border border-secondary border-opacity-25">
                                     <label className="form-label fw-bold text-muted small text-uppercase">Classificação</label>
-                                    <div style={{ pointerEvents: isFatura ? 'none' : 'auto', opacity: isFatura ? 0.5 : 1, position: 'relative', zIndex: 104 }}>
+                                    <div style={{ position: 'relative', zIndex: 104 }}>
                                         <CustomSelect options={categoryOptions} value={singleCategory || 'Não classificada'} onChange={val => setSingleCategory(val)} textColor="text-light" />
                                     </div>
-                                    {isFatura && <small className="text-info d-block mt-2 text-xxs"><i className="bi bi-lock-fill me-1"></i>A categoria de um pagamento de fatura é fixa.</small>}
                                 </div>
                             ) : (
                                 <div className="bg-white bg-opacity-5 theme-surface p-4 rounded-4 border border-warning border-opacity-50">
-                                    {splits.map((s, index) => (
+                                    {splits.map((s: any, index: number) => (
                                         <div key={index} className="d-flex gap-2 mb-3 position-relative" style={{ zIndex: 100 - index }}>
                                             <div style={{ flex: 1, minWidth: '140px' }}>
                                                 <CustomSelect options={categoryOptions} value={s.categoria || 'Não classificada'} onChange={val => { const newS = [...splits]; newS[index].categoria = val; setSplits(newS); }} textColor="text-light" />
                                             </div>
                                             <input type="number" step="0.01" className="form-control form-control-sm text-light" placeholder="R$" value={s.valor || ''} onChange={e => { const newS = [...splits]; newS[index].valor = e.target.value; setSplits(newS); }} style={{ width: '100px' }} />
-                                            <button type="button" className="btn btn-sm btn-outline-danger border-opacity-50" onClick={() => setSplits(splits.filter((_, i) => i !== index))}><i className="bi bi-trash"></i></button>
+                                            <button type="button" className="btn btn-sm btn-outline-danger border-opacity-50" onClick={() => setSplits(splits.filter((_: any, i: number) => i !== index))}><i className="bi bi-trash"></i></button>
                                         </div>
                                     ))}
                                     <button type="button" className="btn btn-sm btn-outline-warning w-100 fw-bold mt-2 border-dashed" onClick={() => setSplits([...splits, { categoria: 'Não classificada', valor: '' }])}>
@@ -588,8 +674,8 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
                                     </button>
                                     <div className="mt-4 text-end small">
                                         <span className="text-muted fw-bold me-2">Soma do Rateio:</span> 
-                                        <span className={`fs-6 fw-bold ${Math.abs(splits.reduce((acc, curr) => acc + (parseFloat(curr.valor as string) || 0), 0) - (parseFloat(valorVisual) || 0)) <= 0.02 ? 'text-success' : 'text-danger'}`}>
-                                            {formatCurrency(splits.reduce((acc, curr) => acc + (parseFloat(curr.valor as string) || 0), 0))} / {formatCurrency(parseFloat(valorVisual))}
+                                        <span className={`fs-6 fw-bold ${Math.abs(splits.reduce((acc: number, curr: any) => acc + (parseFloat(curr.valor) || 0), 0) - (parseFloat(valorVisual) || 0)) <= 0.02 ? 'text-success' : 'text-danger'}`}>
+                                            {formatCurrency(splits.reduce((acc: number, curr: any) => acc + (parseFloat(curr.valor) || 0), 0))} / {formatCurrency(valorVisual)}
                                         </span>
                                     </div>
                                 </div>
@@ -610,9 +696,9 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 // =========================================================
 // SUB-COMPONENTE: MODAL DE RATEIO EM MASSA
 // =========================================================
-function MassSplitModal({ selectedIds, categories, onClose, refreshData }: MassSplitModalProps) {
-    const [splits, setSplits] = useState<MassSplitItem[]>([{ categoria: '', pct: 50 }, { categoria: '', pct: 50 }]);
-    const totalPct = splits.reduce((acc, s) => acc + (parseFloat(s.pct as string) || 0), 0);
+function MassSplitModal({ selectedIds, categories, onClose, refreshData }: any) {
+    const [splits, setSplits] = useState([{ categoria: '', pct: '50' }, { categoria: '', pct: '50' }]);
+    const totalPct = splits.reduce((acc, s) => acc + (parseFloat(s.pct) || 0), 0);
 
     const handleApply = () => {
         if (totalPct !== 100) return alert(`O total deve ser exatamente 100%. Atual: ${totalPct}%`);
@@ -620,19 +706,15 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }: MassS
         const allT = db.getAll();
         let count = 0;
 
-        allT.forEach(t => {
+        allT.forEach((t: any) => {
             if (selectedIds.has(t.identificador)) {
-                // TRAVA AQUI: Exatamente onde a transação 't' está a ser lida
-                if (t.tipo === 'Pagamento de Fatura') return;
-
                 const valorTotal = t.valor; 
                 const novosSplits = [];
                 let somaParcial = 0;
 
                 for (let i = 0; i < splits.length - 1; i++) {
                     const regra = splits[i];
-                    const pctVal = typeof regra.pct === 'string' ? parseFloat(regra.pct) : regra.pct;
-                    const valorFatia = parseFloat((valorTotal * (pctVal / 100)).toFixed(2));
+                    const valorFatia = parseFloat((valorTotal * (parseFloat(regra.pct) / 100)).toFixed(2));
                     novosSplits.push({ categoria: regra.categoria, valor: valorFatia });
                     somaParcial += valorFatia;
                 }
@@ -653,10 +735,10 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }: MassS
         onClose();
     };
 
-    const categoryOptions: SelectOption[] = [
+    const categoryOptions = [
         { value: '', label: 'Selecione...' },
         { value: 'disabled', label: '---', disabled: true },
-        ...categories.map(c => ({ value: c.nome, label: c.nome }))
+        ...categories.map((c: any) => ({ value: c.nome, label: c.nome }))
     ];
 
     return (
@@ -679,12 +761,12 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }: MassS
                                     <input type="number" className="form-control text-light fw-bold" value={s.pct} onChange={e => { const n = [...splits]; n[index].pct = e.target.value; setSplits(n); }} />
                                     <span className="input-group-text bg-transparent border-secondary text-muted">%</span>
                                 </div>
-                                <button type="button" className="btn btn-sm btn-outline-danger border-opacity-50" onClick={() => setSplits(splits.filter((_, i) => i !== index))}><i className="bi bi-trash"></i></button>
+                                <button type="button" className="btn btn-sm btn-outline-danger border-opacity-50" onClick={() => setSplits(splits.filter((_: any, i: number) => i !== index))}><i className="bi bi-trash"></i></button>
                             </div>
                         ))}
 
                         <div className="d-flex justify-content-between align-items-center mt-4 pt-3 border-top border-secondary border-opacity-25">
-                            <button className="btn btn-sm btn-outline-light fw-bold border-dashed" onClick={() => setSplits([...splits, { categoria: '', pct: 0 }])}>+ Adicionar Divisão</button>
+                            <button className="btn btn-sm btn-outline-light fw-bold border-dashed" onClick={() => setSplits([...splits, { categoria: '', pct: '0' }])}>+ Adicionar Divisão</button>
                             <span className={`fw-bold fs-5 ${totalPct === 100 ? 'text-success' : 'text-danger'}`}>Total: {totalPct}%</span>
                         </div>
                     </div>

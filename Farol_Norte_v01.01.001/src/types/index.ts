@@ -24,7 +24,7 @@ export type BankType = 'generic' | 'nubank' | 'inter' | 'bradesco' | 'mercado_pa
 
 export interface Account {
   id: string;
-  nome: string;           
+  nome: string;          
   bank: BankType;
   status: 'active' | 'archived';
 }

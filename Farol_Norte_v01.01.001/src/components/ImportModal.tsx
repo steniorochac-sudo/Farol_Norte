@@ -4,8 +4,6 @@ import Papa from 'papaparse';
 import { useFinance } from '../context/FinanceContext';
 import { db, cardsDb, rulesDb } from '../services/DataService';
 import { BankStrategyFactory, BANK_STRATEGIES } from '../services/BankStrategies';
-import { calcularIdFatura } from '../utils/helpers';
-import type { BankType, CreditCard, Transaction } from '../types/index';
 
 interface ImportModalProps {
     show: boolean;
@@ -22,8 +20,8 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     
     // Estados Calculados
-    const [detectedBank, setDetectedBank] = useState<BankType>('generic');
-    const [accountCards, setAccountCards] = useState<CreditCard[]>([]);
+    const [detectedBank, setDetectedBank] = useState<string>('generic');
+    const [accountCards, setAccountCards] = useState<any[]>([]);
 
     // Sempre que a conta mudar, atualiza as opções de cartão e detecta o banco
     useEffect(() => {
@@ -33,14 +31,12 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
             return;
         }
 
-        const conta = accounts.find(c => c.id === selectedAccountId);
-        // O TypeScript apontou que a propriedade correta é "bank", não "bankType"
+        const conta = accounts.find((c: any) => c.id === selectedAccountId);
         setDetectedBank(conta?.bank || 'generic');
         
-        // Em um app completo, cartões também estariam no Context. Aqui usamos a chamada direta do DB.
-        const cartoes = cardsDb.getAll().filter(c => c.account_id === selectedAccountId);
+        const cartoes = cardsDb.getAll().filter((c: any) => c.account_id === selectedAccountId);
         setAccountCards(cartoes);
-        setImportTarget(''); // Reseta o destino ao trocar de conta
+        setImportTarget(''); 
     }, [selectedAccountId, accounts]);
 
     const handleImport = async () => {
@@ -114,8 +110,8 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
             if (todasTransacoes.length === 0) throw new Error("Nenhuma transação válida encontrada nos arquivos.");
 
             let importedCount = 0;
-            const existingIds = new Set(db.getAll().map(t => t.identificador));
-            const novasParaSalvar: Transaction[] = [];
+            const existingIds = new Set(db.getAll().map((t: any) => t.identificador));
+            const novasParaSalvar: any[] = [];
 
             todasTransacoes.forEach(tr => {
                 tr.account_id = selectedAccountId;
@@ -137,7 +133,7 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                     tr.card_id = targetId;
                     tr.status = tr.valor < 0 ? 'pendente' : 'pago';
                     
-                    const cardObj = cardsDb.getAll().find(c => c.id === targetId);
+                    const cardObj = cardsDb.getAll().find((c: any) => c.id === targetId);
                     if (cardObj && tr.data) {
                         const [dStr, mStr, yStr] = tr.data.split('/');
                         const diaCompra = parseInt(dStr, 10);
@@ -162,7 +158,7 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
 
                 if (tr.identificador && !existingIds.has(tr.identificador) && !novasParaSalvar.some(n => n.identificador === tr.identificador)) {
                     rulesDb.apply(tr);
-                    novasParaSalvar.push(tr as Transaction);
+                    novasParaSalvar.push(tr);
                     existingIds.add(tr.identificador);
                     importedCount++;
                 }
@@ -187,61 +183,53 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
     if (!show) return null;
 
     return (
-        <div className="modal show d-block fade-in" style={{ backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1060 }}>
-            <div className="modal-dialog modal-lg">
-                <div className="modal-content theme-surface shadow-lg">
-                    <div className="modal-header border-bottom border-secondary border-opacity-25 px-4">
-                        <h5 className="modal-title fw-bold text-light"><i className="bi bi-cloud-upload me-2 text-warning"></i>Importar Transações</h5>
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1050 }}>
+            <div className="modal-dialog modal-lg modal-dialog-centered">
+                <div className="modal-content theme-surface shadow-lg border-secondary border-opacity-50">
+                    <div className="modal-header border-bottom border-secondary border-opacity-25 px-4 py-3">
+                        <h5 className="modal-title fw-bold text-light m-0"><i className="bi bi-cloud-arrow-up text-warning me-2"></i>Importar Transações</h5>
                         <button type="button" className="btn-close btn-close-white" onClick={onClose}></button>
                     </div>
                     
                     <div className="modal-body p-4">
                         {isLoading && (
-                            <div className="alert bg-info bg-opacity-25 border border-info border-opacity-50 text-light d-flex align-items-center mb-4">
-                                <span className="spinner-border spinner-border-sm me-3 text-info"></span>
-                                Processando arquivos, por favor aguarde...
+                            <div className="alert alert-info bg-info bg-opacity-10 border-info border-opacity-25 text-info d-flex align-items-center mb-4 radius-12 p-3">
+                                <span className="spinner-border spinner-border-sm me-3"></span>
+                                Processando arquivos e blindando dados, por favor aguarde...
                             </div>
                         )}
 
-                        <div className="mb-4">
+                        <div className="mb-4 fade-in">
                             <label className="form-label fw-bold text-muted small text-uppercase">1. Selecione a Conta</label>
-                            <select 
-                                className="form-select text-light fw-bold shadow-sm" 
-                                value={selectedAccountId} 
-                                onChange={(e) => setSelectedAccountId(e.target.value)} 
-                                disabled={isLoading}
-                                style={{ height: '48px' }}
-                            >
-                                <option value="" disabled>-- Escolha a conta --</option>
-                                {accounts.map(acc => (
-                                    <option key={acc.id} value={acc.id}>{acc.nome}</option>
+                            <select className="form-select form-select-lg bg-transparent text-light border-secondary" value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} disabled={isLoading}>
+                                <option value="" disabled className="text-dark">-- Escolha a conta --</option>
+                                {accounts.map((acc: any) => (
+                                    <option key={acc.id} value={acc.id} className="text-dark">{acc.nome}</option>
                                 ))}
                             </select>
                         </div>
 
                         {selectedAccountId && (
                             <div className="mb-4 fade-in">
-                                <label className="form-label fw-bold text-muted small text-uppercase d-flex justify-content-between">
-                                    2. Qual o destino? 
-                                    <span className="badge bg-transparent border border-warning text-warning ms-2">
-                                        Parser: {BANK_STRATEGIES[detectedBank as keyof typeof BANK_STRATEGIES]?.label || detectedBank}
-                                    </span>
+                                <label className="form-label fw-bold text-muted small text-uppercase d-flex justify-content-between align-items-center">
+                                    <span>2. Qual o destino?</span>
+                                    <span className="badge bg-secondary bg-opacity-25 text-light border border-secondary border-opacity-50">Motor: {BANK_STRATEGIES[detectedBank]?.label || detectedBank}</span>
                                 </label>
                                 <div className="list-group">
-                                    <label className={`list-group-item bg-transparent d-flex gap-3 align-items-center p-3 cursor-pointer border-secondary border-opacity-25 ${importTarget === 'ACCOUNT' ? 'bg-primary bg-opacity-10 border-warning border-opacity-50' : 'hover-opacity'}`}>
-                                        <input className="form-check-input bg-transparent border-secondary" type="radio" name="importTarget" checked={importTarget === 'ACCOUNT'} onChange={() => setImportTarget('ACCOUNT')} disabled={isLoading} />
+                                    <label className={`list-group-item bg-transparent d-flex gap-3 align-items-center p-3 cursor-pointer border-secondary border-opacity-25 ${importTarget === 'ACCOUNT' ? 'border-warning bg-warning bg-opacity-10' : 'hover-opacity'}`}>
+                                        <input className="form-check-input mt-0 bg-transparent border-secondary" type="radio" name="importTarget" checked={importTarget === 'ACCOUNT'} onChange={() => setImportTarget('ACCOUNT')} disabled={isLoading} style={{ transform: 'scale(1.2)' }} />
                                         <div>
-                                            <span className={`fw-bold d-block ${importTarget === 'ACCOUNT' ? 'text-warning' : 'text-light'}`}><i className="bi bi-bank2 me-2"></i>Extrato da Conta</span>
+                                            <span className={`fw-bold d-block ${importTarget === 'ACCOUNT' ? 'text-warning' : 'text-light'}`}><i className="bi bi-bank me-2"></i>Extrato da Conta</span>
                                             <small className="text-muted">Débitos, Pix e Transferências (CSV/OFX)</small>
                                         </div>
                                     </label>
                                     
                                     {accountCards.map(card => (
-                                        <label key={card.id} className={`list-group-item bg-transparent d-flex gap-3 align-items-center p-3 cursor-pointer border-secondary border-opacity-25 ${importTarget === card.id ? 'bg-primary bg-opacity-10 border-warning border-opacity-50' : 'hover-opacity'}`}>
-                                            <input className="form-check-input bg-transparent border-secondary" type="radio" name="importTarget" checked={importTarget === card.id} onChange={() => setImportTarget(card.id)} disabled={isLoading} />
+                                        <label key={card.id} className={`list-group-item bg-transparent d-flex gap-3 align-items-center p-3 cursor-pointer border-secondary border-opacity-25 ${importTarget === card.id ? 'border-warning bg-warning bg-opacity-10' : 'hover-opacity'}`}>
+                                            <input className="form-check-input mt-0 bg-transparent border-secondary" type="radio" name="importTarget" checked={importTarget === card.id} onChange={() => setImportTarget(card.id)} disabled={isLoading} style={{ transform: 'scale(1.2)' }} />
                                             <div>
                                                 <span className={`fw-bold d-block ${importTarget === card.id ? 'text-warning' : 'text-light'}`}><i className="bi bi-credit-card me-2"></i>Fatura: {card.nome}</span>
-                                                <small className="text-muted">Compras Crédito (PDF/CSV)</small>
+                                                <small className="text-muted">Compras no Crédito (PDF/CSV)</small>
                                             </div>
                                         </label>
                                     ))}
@@ -259,7 +247,7 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                                     accept=".csv,.pdf,.ofx" 
                                     onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : [])} 
                                     disabled={isLoading} 
-                                    style={{ height: '48px' }}
+                                    style={{ height: '48px', backgroundColor: 'rgba(255,255,255,0.05)' }}
                                 />
                             </div>
                         )}
