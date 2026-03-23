@@ -68,11 +68,20 @@ export default function Dashboard() {
     const [catDrillDown, setCatDrillDown] = useState<CatDrillDownState>({ show: false, category: '', items: [] });
     const [dayDrillDown, setDayDrillDown] = useState<DayDrillDownState>({ show: false, dateStr: '', items: [] });
 
-    // Referências para os Gráficos
     const chartCategoriasRef = useRef<HTMLCanvasElement | null>(null);
     const chartEvolucaoRef = useRef<HTMLCanvasElement | null>(null);
     const chartCategoryEvolRef = useRef<HTMLCanvasElement | null>(null);
     const chartInstances = useRef<ChartInstances>({});
+
+    // ==========================================
+    // TRAVA GLOBAL: DETECÇÃO ROBUSTA DE FATURA
+    // ==========================================
+    const isPagamentoFatura = (t: any) => {
+        const descLower = (t.nome || '').toLowerCase();
+        const isFaturaByDesc = (t.tipoLancamento === 'conta' || !t.tipoLancamento) && t.valor < 0 && 
+            (descLower.includes('pagamento fatura') || descLower.includes('pgto fatura') || descLower.includes('pagamento de fatura'));
+        return t.tipo === 'Pagamento de Fatura' || t.categoria === 'Pagamento de Fatura' || !!t.ignorarNoFluxo || isFaturaByDesc;
+    };
 
     // ==========================================
     // CÁLCULOS BASE E KPIS
@@ -92,12 +101,7 @@ export default function Dashboard() {
 
         return transactions.filter((t: any) => {
             if (currentAccountId !== "all" && t.account_id !== currentAccountId) return false;
-            if (t.tipo === "Pagamento de Fatura" || t.ignorarNoFluxo) return false;
-
-            const desc = (t.nome || '').toLowerCase();
-            if (t.tipoLancamento === "conta" && t.valor < 0 && (desc.includes("pagamento fatura") || desc.includes("pgto fatura"))) {
-                return false;
-            }
+            if (isPagamentoFatura(t)) return false; // Sincronizado com Transactions.tsx
 
             const parts = t.data?.split("/");
             return parts?.[2] === ano && parts?.[1] === mes;
@@ -107,7 +111,6 @@ export default function Dashboard() {
     const kpi = useMemo(() => {
         let receitas = 0, despesas = 0, pendentes = 0;
         
-        // 1. Cálculos do Mês Selecionado (Receitas, Despesas e Endividamento)
         currentMonthData.forEach((t: any) => {
             if (t.valor > 0) {
                 receitas += t.valor;
@@ -120,17 +123,15 @@ export default function Dashboard() {
 
         const saldo = receitas - despesas;
         const economia = receitas > 0 ? ((saldo / receitas) * 100).toFixed(1) : "0.0";
-        // Taxa de Endividamento = O quanto da sua receita já está comprometido com dívidas em aberto
         const endividamento = receitas > 0 ? ((pendentes / receitas) * 100).toFixed(1) : (pendentes > 0 ? "100+" : "0.0");
 
-        // 2. Cálculo Global de Atrasos (Varre todo o histórico, independente do mês filtrado)
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
         let atrasadas = 0;
 
         transactions.forEach((t: any) => {
             if (currentAccountId !== "all" && t.account_id !== currentAccountId) return;
-            if (t.valor >= 0 || t.tipo === "Pagamento de Fatura" || t.status === 'pago') return;
+            if (t.valor >= 0 || t.status === 'pago' || isPagamentoFatura(t)) return;
             
             const venc = parseDateBR(t.dataVencimento || t.data);
             if (venc && venc < hoje) {
@@ -275,7 +276,7 @@ export default function Dashboard() {
             const mesesParaExibir = getUltimos6Meses(selectedMonth);
             transactions.forEach((t: any) => {
                 if (currentAccountId !== "all" && t.account_id !== currentAccountId) return;
-                if (t.valor >= 0 || t.tipo === "Pagamento de Fatura" || t.ignorarNoFluxo) return;
+                if (t.valor >= 0 || isPagamentoFatura(t)) return;
                 const transMes = t.data.split('/').slice(1).reverse().join('-');
                 if (mesesParaExibir.includes(transMes)) {
                     const parts = (t.split && t.split.length > 0) ? t.split : [t];
@@ -328,7 +329,7 @@ export default function Dashboard() {
             const catHistory: Record<string, Record<string, number>> = {};
             transactions.forEach((t: any) => {
                 if (currentAccountId !== "all" && t.account_id !== currentAccountId) return;
-                if (t.valor >= 0 || t.tipo === "Pagamento de Fatura" || t.ignorarNoFluxo) return;
+                if (t.valor >= 0 || isPagamentoFatura(t)) return;
                 const transMes = t.data.split('/').slice(1).reverse().join('-');
 
                 if (mesesParaExibir.includes(transMes)) {
@@ -596,7 +597,7 @@ export default function Dashboard() {
             {/* LINHA DE GRÁFICOS */}
             <div className="row mb-4 g-3">
                 <div className="col-md-6">
-                    <div className="theme-surface shadow-sm h-100">
+                    <div className="theme-surface shadow-sm h-100 position-relative">
                         <div className="card-header bg-transparent border-bottom border-secondary border-opacity-25 fw-bold d-flex justify-content-between align-items-center py-3 px-4">
                             <span>Top Categorias</span>
                             {!catDrillDown.show && <small className="text-muted text-xxs">Toque na fatia p/ detalhes</small>}
@@ -607,8 +608,8 @@ export default function Dashboard() {
                             </div>
                             
                             {catDrillDown.show && (
-                                <div className="w-100 h-100 d-flex flex-column absolute-top drilldown-overlay radius-bottom-16">
-                                    <div className="d-flex justify-content-between align-items-center px-4 py-2 border-bottom border-secondary border-opacity-25">
+                                <div className="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column drilldown-overlay radius-bottom-16 bg-dark bg-opacity-75 backdrop-blur">
+                                    <div className="d-flex justify-content-between align-items-center px-4 py-2 border-bottom border-secondary border-opacity-25 mt-2">
                                         <span className="small fw-bold text-warning">Detalhes: {catDrillDown.category}</span>
                                         <button className="btn btn-sm btn-outline-light" onClick={() => setCatDrillDown({ show: false, category: '', items: [] })}>
                                             <i className="bi bi-arrow-left"></i> Voltar
@@ -639,7 +640,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="col-md-6">
-                    <div className="theme-surface shadow-sm h-100">
+                    <div className="theme-surface shadow-sm h-100 position-relative">
                         <div className="card-header bg-transparent border-bottom border-secondary border-opacity-25 fw-bold d-flex justify-content-between align-items-center py-3 px-4">
                             <span>Intensidade de Gastos</span>
                             {!dayDrillDown.show && <small className="text-muted text-xxs">Toque no dia p/ detalhes</small>}
@@ -655,7 +656,7 @@ export default function Dashboard() {
                             </div>
                             
                             {dayDrillDown.show && (
-                                <div className="w-100 h-100 d-flex flex-column position-absolute top-0 start-0 drilldown-overlay radius-bottom-16">
+                                <div className="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column drilldown-overlay radius-bottom-16 bg-dark bg-opacity-75 backdrop-blur">
                                     <div className="d-flex justify-content-between align-items-center px-4 py-2 border-bottom border-secondary border-opacity-25 mt-2">
                                         <span className="small fw-bold text-warning">Gastos do dia {dayDrillDown.dateStr}</span>
                                         <button className="btn btn-sm btn-outline-light" onClick={() => setDayDrillDown({ show: false, dateStr: '', items: [] })}>

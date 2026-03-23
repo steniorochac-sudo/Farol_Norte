@@ -4,17 +4,17 @@ import { useFinance } from '../context/FinanceContext';
 import { formatCurrency } from '../utils/formatters';
 import { parseDateBR, generateUUID } from '../utils/helpers';
 import { db, cardsDb } from '../services/DataService';
-import ImportModal from '../components/ImportModal'; 
+import ImportModal from '../components/ImportModal';
 import CustomSelect from '../components/CustomSelect';
 
 export default function Transactions() {
-    const { 
-        transactions = [], 
-        accounts = [], 
-        categories = [], 
-        currentAccountId, 
-        changeAccount, 
-        refreshData 
+    const {
+        transactions = [],
+        accounts = [],
+        categories = [],
+        currentAccountId,
+        changeAccount,
+        refreshData
     } = useFinance() || {};
 
     // ==========================================
@@ -34,13 +34,28 @@ export default function Transactions() {
     const [modalEdit, setModalEdit] = useState({ show: false, transaction: null });
     const [modalMassSplit, setModalMassSplit] = useState({ show: false });
 
+    // ===  GATILHO DE ATUALIZAÇÃO INSTANTÂNEA ===
+    const [updateTrigger, setUpdateTrigger] = useState(0);
+    const forceUpdate = () => {
+        if (refreshData) refreshData();
+        setUpdateTrigger(prev => prev + 1);
+    };
+
+    // Lê direto do banco para evitar o atraso do Contexto Global
+    const baseTransactions = useMemo(() => {
+        // O uso do spread [...] força uma nova referência em memória, 
+        // obrigando o React a descartar o cache e renderizar os objetos editados.
+        return [...db.getAll()];
+    }, [transactions, updateTrigger]);
+    // ================================================
+
     useEffect(() => {
         localStorage.setItem('transactions_search_pref', searchTerm);
         localStorage.setItem('transactions_period_pref', selectedMonth);
         localStorage.setItem('transactions_category_pref', selectedCategory);
         localStorage.setItem('transactions_type_pref', selectedType);
-        setCurrentPage(1); 
-        setSelectedIds(new Set()); 
+        setCurrentPage(1);
+        setSelectedIds(new Set());
     }, [searchTerm, selectedMonth, selectedCategory, selectedType]);
 
     // ==========================================
@@ -48,7 +63,7 @@ export default function Transactions() {
     // ==========================================
     const availableMonths = useMemo(() => {
         const months = new Set();
-        transactions.forEach((t: any) => {
+        baseTransactions.forEach((t: any) => {
             if (t.data) {
                 const parts = t.data.split('/');
                 if (parts.length === 3) months.add(`${parts[2]}-${parts[1]}`);
@@ -57,10 +72,10 @@ export default function Transactions() {
         const current = new Date().toISOString().slice(0, 7);
         months.add(current);
         return Array.from(months).sort().reverse();
-    }, [transactions]);
+    }, [baseTransactions]);
 
     const filteredTransactions = useMemo(() => {
-        return transactions.filter((t: any) => {
+        return baseTransactions.filter((t: any) => {
             if (currentAccountId !== 'all' && t.account_id !== currentAccountId) return false;
             if (selectedType !== 'all' && t.tipoLancamento !== selectedType) return false;
 
@@ -103,7 +118,7 @@ export default function Transactions() {
             if (!dateB) return -1;
             return dateB.getTime() - dateA.getTime();
         });
-    }, [transactions, currentAccountId, selectedMonth, selectedCategory, selectedType, searchTerm]);
+    }, [baseTransactions, currentAccountId, selectedMonth, selectedCategory, selectedType, searchTerm]);
 
     const navegarMes = (dir: number) => {
         if (selectedMonth === 'all') return;
@@ -160,7 +175,7 @@ export default function Transactions() {
         if (!window.confirm(`🔴 PERIGO: Excluir ${selectedIds.size} transações permanentemente?`)) return;
         const allT = db.getAll().filter((t: any) => !selectedIds.has(t.identificador));
         db.save(allT);
-        refreshData();
+        forceUpdate();
         setSelectedIds(new Set());
     };
 
@@ -171,14 +186,14 @@ export default function Transactions() {
         const allT = db.getAll();
         allT.forEach((t: any) => {
             if (selectedIds.has(t.identificador)) {
-                if (t.tipo === 'Pagamento de Fatura' && novaCategoria !== 'Pagamento de Fatura') return; 
+                if (t.tipo === 'Pagamento de Fatura' && novaCategoria !== 'Pagamento de Fatura') return;
                 t.categoria = novaCategoria;
                 if (novaCategoria === 'Pagamento de Fatura') t.tipo = 'Pagamento de Fatura';
                 delete t.split;
             }
         });
         db.save(allT);
-        refreshData();
+        forceUpdate();
         setSelectedIds(new Set());
     };
 
@@ -253,8 +268,8 @@ export default function Transactions() {
                     <div className="col-md-2 position-relative" style={{ zIndex: 104 }}>
                         <CustomSelect options={accountOptions} value={currentAccountId} onChange={(val) => changeAccount(val)} textColor="text-warning" />
                     </div>
-                    
-                    <div className="col-md-3 position-relative" style={{ zIndex: 103 }}> 
+
+                    <div className="col-md-3 position-relative" style={{ zIndex: 103 }}>
                         <div className="input-group flex-nowrap w-100">
                             <button className="btn btn-outline-secondary text-white-50 border-secondary radius-left-8" onClick={() => navegarMes(1)} disabled={selectedMonth === 'all' || availableMonths.indexOf(selectedMonth) === availableMonths.length - 1}><i className="bi bi-chevron-left"></i></button>
                             <div className="w-100 position-relative z-150">
@@ -286,7 +301,7 @@ export default function Transactions() {
                     <small className="text-muted">Exibindo {paginatedTransactions.length} de {filteredTransactions.length}</small>
                     <div className="btn-group btn-group-sm">
                         <button className="btn btn-outline-secondary text-white-50 border-secondary" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}><i className="bi bi-chevron-left"></i></button>
-                        <button className="btn btn-outline-secondary border-secondary disabled text-light fw-bold" style={{opacity: 1}}>{currentPage} / {totalPages}</button>
+                        <button className="btn btn-outline-secondary border-secondary disabled text-light fw-bold" style={{ opacity: 1 }}>{currentPage} / {totalPages}</button>
                         <button className="btn btn-outline-secondary text-white-50 border-secondary" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}><i className="bi bi-chevron-right"></i></button>
                     </div>
                 </div>
@@ -320,7 +335,7 @@ export default function Transactions() {
                             const isPositive = valorDisplay >= 0;
                             const isCartao = t.tipoLancamento === 'cartao' || !!t.card_id;
                             const isPago = t.status === 'pago';
-                            
+
                             const descLower = (t.nome || '').toLowerCase();
                             const isFaturaByDesc = (t.tipoLancamento === 'conta' || !t.tipoLancamento) && t.valor < 0 && (descLower.includes('pagamento fatura') || descLower.includes('pgto fatura') || descLower.includes('pagamento de fatura'));
                             const isPagamento = t.tipo === 'Pagamento de Fatura' || t.categoria === 'Pagamento de Fatura' || !!t.ignorarNoFluxo || isFaturaByDesc;
@@ -337,7 +352,7 @@ export default function Transactions() {
                                 showCompraDate = true;
                                 let finalVencimento = t.dataVencimento;
                                 const isVencimentoValido = finalVencimento && finalVencimento !== 'undefined' && finalVencimento !== 'NaN' && finalVencimento !== 'null';
-                                
+
                                 if (!isVencimentoValido && t.data) {
                                     const cards = cardsDb.getAll();
                                     const card = cards.find(c => c.id === t.card_id || c.id === t.account_id);
@@ -346,10 +361,10 @@ export default function Transactions() {
                                         const diaCompra = parseInt(dStr, 10);
                                         let mesFatura = parseInt(mStr, 10);
                                         let anoFatura = parseInt(yStr, 10);
-                                        
+
                                         const fechamento = parseInt((card as any).closingDay || (card as any).diaFechamento || '1', 10);
                                         const vencimento = parseInt((card as any).dueDay || (card as any).diaVencimento || '10', 10);
-                                        
+
                                         if (diaCompra >= fechamento) {
                                             mesFatura++;
                                             if (mesFatura > 12) { mesFatura = 1; anoFatura++; }
@@ -390,7 +405,7 @@ export default function Transactions() {
 
                             return (
                                 <div key={t.identificador} className={`list-group-item bg-transparent d-flex align-items-center gap-3 py-3 px-3 border-bottom border-secondary border-opacity-25 hover-opacity ${isSelected ? 'bg-primary bg-opacity-25' : ''}`} style={{ borderLeft: isSelected ? '4px solid var(--farol-glow)' : '1px solid transparent' }}>
-                                    
+
                                     {/* 1. CHECKBOX */}
                                     <div className="form-check m-0 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                         <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSelected} onChange={() => toggleSelection(t.identificador)} style={{ cursor: 'pointer', transform: 'scale(1.2)' }} />
@@ -398,7 +413,7 @@ export default function Transactions() {
 
                                     {/* 7. ÁREA CLICÁVEL COM ÍCONES E TEXTO */}
                                     <div className="d-flex flex-grow-1 align-items-center gap-3 cursor-pointer" style={{ minWidth: 0 }} onClick={() => setModalEdit({ show: true, transaction: t as any })}>
-                                        
+
                                         {/* 2. ÍCONES DINÂMICOS (Verde, Vermelho ou Amarelo) */}
                                         <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '40px', height: '40px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
                                             <i className={`bi fs-5 ${isCartao ? 'bi-credit-card text-warning' : (isPositive ? 'bi-bank text-success' : 'bi-bank text-danger')}`}></i>
@@ -419,7 +434,7 @@ export default function Transactions() {
 
                                             {/* LINHA DE DATAS E TAGS (Responsiva) */}
                                             <div className="d-flex flex-wrap align-items-center mt-2 gap-2 small" style={{ minWidth: 0 }}>
-                                                
+
                                                 {/* 4. LEGENDA DUPLA DE DATAS */}
                                                 <div className="d-flex flex-wrap align-items-center gap-2 flex-shrink-0">
                                                     {showCompraDate && (
@@ -452,7 +467,7 @@ export default function Transactions() {
 
                                                 <div className="ms-auto flex-shrink-0">
                                                     {isPagamento && <span className="badge bg-info bg-opacity-25 text-info border border-info border-opacity-50" style={{ fontSize: '0.7rem' }}>Pagamento</span>}
-                                                    
+
                                                     {!isPositive && !isPagamento && (
                                                         <>
                                                             {!isCartao ? (
@@ -489,7 +504,7 @@ export default function Transactions() {
                         <span className="d-none d-md-inline fw-bold text-light">Selecionadas</span>
                     </div>
                     <div className="d-flex align-items-center gap-2">
-                        
+
                         <div style={{ width: '200px' }}>
                             <CustomSelect options={massCategoryOptions} value="" onChange={(val) => handleMassCategorize(val)} textColor="text-light" />
                         </div>
@@ -504,10 +519,29 @@ export default function Transactions() {
                     </div>
                 </div>
             )}
-            
-            <ImportModal show={showImportModal} onClose={() => setShowImportModal(false)} />
-            {modalEdit.show && <TransactionEditModal transaction={modalEdit.transaction} onClose={() => setModalEdit({ show: false, transaction: null })} accounts={accounts} categories={categories} refreshData={refreshData} />}
-            {modalMassSplit.show && <MassSplitModal selectedIds={selectedIds} categories={categories} onClose={() => { setModalMassSplit({ show: false }); setSelectedIds(new Set()); }} refreshData={refreshData} />}
+
+            <ImportModal
+                show={showImportModal}
+                onClose={() => {
+                    setShowImportModal(false);
+                    forceUpdate();
+                }}
+            />
+
+            {modalEdit.show && <TransactionEditModal transaction={modalEdit.transaction} onClose={() => setModalEdit({ show: false, transaction: null })} accounts={accounts} categories={categories} refreshData={forceUpdate} />}
+
+            {modalMassSplit.show && (
+                <MassSplitModal
+                    selectedIds={selectedIds}
+                    categories={categories}
+                    refreshData={forceUpdate}
+                    onClose={() => {
+                        setModalMassSplit({ show: false });
+                        setSelectedIds(new Set());
+                        forceUpdate();
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -561,6 +595,10 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
             tipo: finalTipo
         };
 
+        let novaTransacao: any = {
+            ...finalTransaction
+        };
+
         if (isSplit) {
             let somaFatias = 0;
             const splitFinal = splits.map((s: any) => {
@@ -571,19 +609,22 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
             if (Math.abs(somaFatias - valorFinalVisual) > 0.02) {
                 return alert(`A soma do rateio (${formatCurrency(somaFatias)}) não bate com o total (${formatCurrency(valorFinalVisual)}).`);
             }
-            finalTransaction.split = splitFinal;
-            finalTransaction.categoria = 'Múltipla';
+            novaTransacao.split = splitFinal;
+            novaTransacao.categoria = 'Múltipla';
         } else {
-            finalTransaction.categoria = singleCategory;
-            finalTransaction.split = undefined;
+            novaTransacao.categoria = singleCategory;
         }
 
         const allT = db.getAll();
         if (isNew) {
-            allT.push(finalTransaction);
+            allT.push(novaTransacao);
         } else {
             const idx = allT.findIndex((t: any) => t.identificador === transaction.identificador);
-            if (idx > -1) allT[idx] = { ...allT[idx], ...finalTransaction };
+            if (idx > -1) {
+                allT[idx] = { ...allT[idx], ...novaTransacao };
+                // TRAVA: Destrói o array de split zumbi se a transação voltou a ser categoria única
+                if (!isSplit) delete allT[idx].split;
+            }
         }
 
         db.save(allT);
@@ -640,15 +681,15 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
                                     <div style={{ pointerEvents: isAccountDisabled ? 'none' : 'auto', opacity: isAccountDisabled ? 0.5 : 1, position: 'relative', zIndex: 105 }}>
                                         <CustomSelect options={accountOptions} value={accountId || accounts[0]?.id} onChange={val => setAccountId(val)} textColor="text-light" />
                                     </div>
-                                    {isAccountDisabled && <small className="text-warning d-block mt-1" style={{fontSize: '0.75rem'}}><i className="bi bi-info-circle me-1"></i>A conta de cartão não pode ser alterada aqui.</small>}
+                                    {isAccountDisabled && <small className="text-warning d-block mt-1" style={{ fontSize: '0.75rem' }}><i className="bi bi-info-circle me-1"></i>A conta de cartão não pode ser alterada aqui.</small>}
                                 </div>
                             </div>
 
                             <hr className="border-secondary border-opacity-25 my-4" />
 
                             <div className="form-check form-switch mb-4">
-                                <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSplit} onChange={e => setIsSplit(e.target.checked)} style={{cursor: 'pointer'}} />
-                                <label className="form-check-label fw-bold text-light" style={{cursor: 'pointer'}}><i className="bi bi-pie-chart-fill text-warning me-2"></i>Dividir em Múltiplas Categorias (Rateio)</label>
+                                <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSplit} onChange={e => setIsSplit(e.target.checked)} style={{ cursor: 'pointer' }} />
+                                <label className="form-check-label fw-bold text-light" style={{ cursor: 'pointer' }}><i className="bi bi-pie-chart-fill text-warning me-2"></i>Dividir em Múltiplas Categorias (Rateio)</label>
                             </div>
 
                             {!isSplit ? (
@@ -673,7 +714,7 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
                                         + Adicionar Fatia de Rateio
                                     </button>
                                     <div className="mt-4 text-end small">
-                                        <span className="text-muted fw-bold me-2">Soma do Rateio:</span> 
+                                        <span className="text-muted fw-bold me-2">Soma do Rateio:</span>
                                         <span className={`fs-6 fw-bold ${Math.abs(splits.reduce((acc: number, curr: any) => acc + (parseFloat(curr.valor) || 0), 0) - (parseFloat(valorVisual) || 0)) <= 0.02 ? 'text-success' : 'text-danger'}`}>
                                             {formatCurrency(splits.reduce((acc: number, curr: any) => acc + (parseFloat(curr.valor) || 0), 0))} / {formatCurrency(valorVisual)}
                                         </span>
@@ -708,7 +749,7 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }: any) 
 
         allT.forEach((t: any) => {
             if (selectedIds.has(t.identificador)) {
-                const valorTotal = t.valor; 
+                const valorTotal = t.valor;
                 const novosSplits = [];
                 let somaParcial = 0;
 
