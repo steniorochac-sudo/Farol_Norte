@@ -30,14 +30,20 @@ export interface Account {
 }
 
 export interface CreditCard {
-  id: string;
-  nome: string;          
-  bank: BankType;
-  account_id: string;     
-  closingDay: number;     
-  dueDay: number;         
-  limit?: number;         
-  status: 'active' | 'archived' | 'cancelled';
+    id: string;
+    nome: string;
+    account_id: string;
+    limit: number;
+    
+    // Padrão em Inglês
+    closingDay?: number | string;
+    dueDay?: number | string;
+    
+    // Padrão em Português (Legado/Alternativo)
+    diaFechamento?: number | string;
+    diaVencimento?: number | string;
+    
+    status?: 'active' | 'archived';
 }
 
 export type CategoryNature = 'fixa' | 'variavel' | 'eventual' | 'investment';

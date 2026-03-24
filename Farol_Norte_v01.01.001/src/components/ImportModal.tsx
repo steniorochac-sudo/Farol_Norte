@@ -4,6 +4,7 @@ import Papa from 'papaparse';
 import { useFinance } from '../context/FinanceContext';
 import { db, cardsDb, rulesDb } from '../services/DataService';
 import { BankStrategyFactory, BANK_STRATEGIES } from '../services/BankStrategies';
+import { OfxParser } from '../services/parsers/OfxParser'; 
 
 interface ImportModalProps {
     show: boolean;
@@ -55,15 +56,25 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const isPdf = file.name.toLowerCase().endsWith(".pdf");
+                const isOfx = file.name.toLowerCase().endsWith(".ofx"); // NOVO INTERCEPTADOR
                 let transacoesDoArquivo: any[] = [];
 
-                if (isPdf) {
+                if (isOfx) {
+                    // === ROTA EXPRESSA: OFX UNIVERSAL ===
+                    const rawText = await file.text();
+                    const ofxParser = new OfxParser();
+                    transacoesDoArquivo = ofxParser.parseRawText(rawText, selectedAccountId, isCreditCard ? targetId : undefined);
+                    
+                } else if (isPdf) {
+                    // Rota de PDF
                     if (!(strategy as any).parsePDF) {
                         throw new Error(`O modelo ${detectedBank} não suporta PDF (${file.name}).`);
                     }
                     const arrayBuffer = await file.arrayBuffer();
                     transacoesDoArquivo = await (strategy as any).parsePDF(arrayBuffer, targetId);
+                    
                 } else {
+                    // Rota padrão CSV (Mantém a trava de Extrato vs Fatura)
                     let cleanText = await file.text();
                     
                     if (typeof (strategy as any).preProcessText === 'function') {
@@ -78,7 +89,6 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                         transformHeader: (h: string) => h.trim().toLowerCase()
                     });
 
-                    // === TRAVA DE SEGURANÇA: EXTRATO VS FATURA ===
                     if (parseResult.meta && parseResult.meta.fields && parseResult.data.length > 0) {
                         const colunas = parseResult.meta.fields.join(' ').toLowerCase();
                         const isExtratoHeaders = colunas.includes('saldo') || colunas.includes('balance') || colunas.includes('release_date') || colunas.includes('net_amount') || colunas.includes('transaction_type');
@@ -91,7 +101,6 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                             throw new Error(`O arquivo "${file.name}" é uma FATURA de cartão, mas você selecionou a importação de EXTRATO. Cancele e corrija o destino.`);
                         }
                     }
-                    // =============================================
 
                     if (parseResult.data) {
                         transacoesDoArquivo = strategy.parse(

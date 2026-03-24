@@ -12,13 +12,13 @@ export default function Transactions() {
         transactions = [],
         accounts = [],
         categories = [],
-        currentAccountId,
+        currentAccountId = 'all',
         changeAccount,
-        refreshData
+        refreshData: globalRefresh
     } = useFinance() || {};
 
     // ==========================================
-    // 1. ESTADOS DE INTERFACE E FILTROS
+    // 1. ESTADOS DE INTERFACE E GATILHO INSTANTÂNEO
     // ==========================================
     const [showImportModal, setShowImportModal] = useState(false);
 
@@ -29,25 +29,20 @@ export default function Transactions() {
 
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 50;
-    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [selectedIds, setSelectedIds] = useState(new Set<string>());
 
     const [modalEdit, setModalEdit] = useState({ show: false, transaction: null });
     const [modalMassSplit, setModalMassSplit] = useState({ show: false });
 
-    // ===  GATILHO DE ATUALIZAÇÃO INSTANTÂNEA ===
     const [updateTrigger, setUpdateTrigger] = useState(0);
     const forceUpdate = () => {
-        if (refreshData) refreshData();
+        if (globalRefresh) globalRefresh();
         setUpdateTrigger(prev => prev + 1);
     };
 
-    // Lê direto do banco para evitar o atraso do Contexto Global
     const baseTransactions = useMemo(() => {
-        // O uso do spread [...] força uma nova referência em memória, 
-        // obrigando o React a descartar o cache e renderizar os objetos editados.
         return [...db.getAll()];
     }, [transactions, updateTrigger]);
-    // ================================================
 
     useEffect(() => {
         localStorage.setItem('transactions_search_pref', searchTerm);
@@ -59,10 +54,10 @@ export default function Transactions() {
     }, [searchTerm, selectedMonth, selectedCategory, selectedType]);
 
     // ==========================================
-    // 2. MOTOR DE FILTRAGEM (USEMEMO)
+    // 2. MOTOR DE FILTRAGEM
     // ==========================================
     const availableMonths = useMemo(() => {
-        const months = new Set();
+        const months = new Set<string>();
         baseTransactions.forEach((t: any) => {
             if (t.data) {
                 const parts = t.data.split('/');
@@ -124,11 +119,10 @@ export default function Transactions() {
         if (selectedMonth === 'all') return;
         const idx = availableMonths.indexOf(selectedMonth) + dir;
         if (idx >= 0 && idx < availableMonths.length) {
-            setSelectedMonth(availableMonths[idx] as string);
+            setSelectedMonth(availableMonths[idx]);
         }
     };
 
-    // MOTOR DE KPIs BLINDADO (Ignora Pagamentos de Fatura)
     const summary = useMemo(() => {
         return filteredTransactions.reduce((acc, t: any) => {
             const descLower = (t.nome || '').toLowerCase();
@@ -198,7 +192,7 @@ export default function Transactions() {
     };
 
     // ==========================================
-    // PREPARAÇÃO DE OPÇÕES PARA OS CUSTOM SELECTS
+    // OPÇÕES DOS SELECTS
     // ==========================================
     const accountOptions = [
         { value: 'all', label: '🏦 Todas as Contas' },
@@ -210,7 +204,7 @@ export default function Transactions() {
         { value: 'disabled', label: '---', disabled: true },
         ...availableMonths.map((mesAno: any) => {
             const [ano, mes] = mesAno.split('-');
-            const dateObj = new Date(ano, mes - 1, 1);
+            const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
             const nomeMes = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
             return { value: mesAno, label: nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1) };
         })
@@ -334,7 +328,8 @@ export default function Transactions() {
                             const isSelected = selectedIds.has(t.identificador);
                             const isPositive = valorDisplay >= 0;
                             const isCartao = t.tipoLancamento === 'cartao' || !!t.card_id;
-                            const isPago = t.status === 'pago';
+                            // A presença da Data de Pagamento é o que dita se a conta está paga
+                            const isPago = t.dataPagamento && t.dataPagamento.trim() !== '';
 
                             const descLower = (t.nome || '').toLowerCase();
                             const isFaturaByDesc = (t.tipoLancamento === 'conta' || !t.tipoLancamento) && t.valor < 0 && (descLower.includes('pagamento fatura') || descLower.includes('pgto fatura') || descLower.includes('pagamento de fatura'));
@@ -342,18 +337,13 @@ export default function Transactions() {
 
                             let vencStatusClass = "text-muted opacity-75";
                             let vencIcon = "bi-calendar-event opacity-75";
-                            let vencText = t.data;
-                            let showCompraDate = false;
+                            
+                            // === NOVO MOTOR DE RENDERIZAÇÃO DE DATAS ===
+                            let finalVencimento = t.dataVencimento;
+                            const isVencimentoValido = finalVencimento && finalVencimento !== 'undefined' && finalVencimento !== 'NaN' && finalVencimento !== 'null';
 
-                            const hoje = new Date();
-                            hoje.setHours(0, 0, 0, 0);
-
-                            if (isCartao) {
-                                showCompraDate = true;
-                                let finalVencimento = t.dataVencimento;
-                                const isVencimentoValido = finalVencimento && finalVencimento !== 'undefined' && finalVencimento !== 'NaN' && finalVencimento !== 'null';
-
-                                if (!isVencimentoValido && t.data) {
+                            if (!isVencimentoValido && t.data) {
+                                if (isCartao) {
                                     const cards = cardsDb.getAll();
                                     const card = cards.find(c => c.id === t.card_id || c.id === t.account_id);
                                     if (card) {
@@ -373,84 +363,81 @@ export default function Transactions() {
                                     } else {
                                         finalVencimento = t.data;
                                     }
-                                }
-
-                                const dataRef = finalVencimento || t.data;
-                                const vencDate = parseDateBR(dataRef);
-
-                                if (isPago) {
-                                    vencStatusClass = "text-muted opacity-75";
-                                    vencIcon = "bi-check-circle-fill text-success opacity-75";
-                                    vencText = `Fatura Paga (${dataRef})`;
-                                } else if (vencDate) {
-                                    if (vencDate < hoje) {
-                                        vencStatusClass = "text-danger fw-bold bg-danger bg-opacity-10 px-2 rounded";
-                                        vencIcon = "bi-exclamation-circle-fill text-danger";
-                                        vencText = `Venc: ${dataRef} (Atrasado)`;
-                                    } else if (vencDate.getTime() === hoje.getTime()) {
-                                        vencStatusClass = "text-warning fw-bold bg-warning bg-opacity-10 px-2 rounded";
-                                        vencIcon = "bi-clock-fill text-warning";
-                                        vencText = `Vence Hoje: ${dataRef}`;
-                                    } else {
-                                        vencStatusClass = "text-info";
-                                        vencIcon = "bi-calendar-event";
-                                        vencText = `Venc: ${dataRef}`;
-                                    }
                                 } else {
-                                    vencStatusClass = "text-warning";
-                                    vencIcon = "bi-exclamation-triangle";
-                                    vencText = `Vencimento Indisponível`;
+                                    finalVencimento = t.data; // Conta corrente herda a data da compra se não tiver vencimento
+                                }
+                            }
+
+                            const dataRef = finalVencimento || t.data;
+                            const vencDate = parseDateBR(dataRef);
+                            const hoje = new Date();
+                            hoje.setHours(0, 0, 0, 0);
+
+                            let vencText = dataRef;
+                            let showCompraDate = (t.data !== dataRef) || isCartao; // Mostra data de compra se for diferente do vencimento
+
+                            if (isPago) {
+                                vencStatusClass = "text-muted opacity-75";
+                                vencIcon = "bi-check-circle-fill text-success opacity-75";
+                                vencText = isCartao ? `Fatura (${dataRef})` : `Pago em ${t.dataPagamento || dataRef}`;
+                            } else if (vencDate) {
+                                if (vencDate < hoje) {
+                                    vencStatusClass = "text-danger fw-bold bg-danger bg-opacity-10 px-2 rounded";
+                                    vencIcon = "bi-exclamation-circle-fill text-danger";
+                                    vencText = `Venc: ${dataRef} (Atrasado)`;
+                                    showCompraDate = true;
+                                } else if (vencDate.getTime() === hoje.getTime()) {
+                                    vencStatusClass = "text-warning fw-bold bg-warning bg-opacity-10 px-2 rounded";
+                                    vencIcon = "bi-clock-fill text-warning";
+                                    vencText = `Vence Hoje: ${dataRef}`;
+                                    showCompraDate = true;
+                                } else {
+                                    vencStatusClass = "text-info";
+                                    vencIcon = "bi-calendar-event";
+                                    vencText = `Venc: ${dataRef}`;
                                 }
                             }
 
                             return (
                                 <div key={t.identificador} className={`list-group-item bg-transparent d-flex align-items-center gap-3 py-3 px-3 border-bottom border-secondary border-opacity-25 hover-opacity ${isSelected ? 'bg-primary bg-opacity-25' : ''}`} style={{ borderLeft: isSelected ? '4px solid var(--farol-glow)' : '1px solid transparent' }}>
 
-                                    {/* 1. CHECKBOX */}
                                     <div className="form-check m-0 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                         <input className="form-check-input bg-transparent border-secondary" type="checkbox" checked={isSelected} onChange={() => toggleSelection(t.identificador)} style={{ cursor: 'pointer', transform: 'scale(1.2)' }} />
                                     </div>
 
-                                    {/* 7. ÁREA CLICÁVEL COM ÍCONES E TEXTO */}
                                     <div className="d-flex flex-grow-1 align-items-center gap-3 cursor-pointer" style={{ minWidth: 0 }} onClick={() => setModalEdit({ show: true, transaction: t as any })}>
 
-                                        {/* 2. ÍCONES DINÂMICOS (Verde, Vermelho ou Amarelo) */}
                                         <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '40px', height: '40px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
                                             <i className={`bi fs-5 ${isCartao ? 'bi-credit-card text-warning' : (isPositive ? 'bi-bank text-success' : 'bi-bank text-danger')}`}></i>
                                         </div>
 
                                         <div className="flex-grow-1" style={{ minWidth: 0 }}>
                                             <div className="d-flex justify-content-between align-items-center gap-2">
-                                                {/* 3. DESCRIÇÃO */}
                                                 <div className="fw-bold text-light text-truncate" title={t.nome} style={{ flex: 1 }}>
                                                     {t.nome}
                                                 </div>
-                                                {/* 5. VALOR */}
                                                 <div className={`fw-bold text-nowrap flex-shrink-0 ${isPositive ? 'text-success' : 'text-danger'}`}>
                                                     {isPartial && <i className="bi bi-pie-chart-fill text-warning me-1" title="Valor rateado"></i>}
                                                     {formatCurrency(valorDisplay)}
                                                 </div>
                                             </div>
 
-                                            {/* LINHA DE DATAS E TAGS (Responsiva) */}
                                             <div className="d-flex flex-wrap align-items-center mt-2 gap-2 small" style={{ minWidth: 0 }}>
 
-                                                {/* 4. LEGENDA DUPLA DE DATAS */}
                                                 <div className="d-flex flex-wrap align-items-center gap-2 flex-shrink-0">
                                                     {showCompraDate && (
-                                                        <span className="text-muted d-flex align-items-center bg-secondary bg-opacity-10 px-2 rounded" style={{ fontSize: '0.75rem' }} title="Data da Compra">
+                                                        <span className="text-muted d-flex align-items-center bg-secondary bg-opacity-10 px-2 rounded" style={{ fontSize: '0.75rem' }} title="Data do Lançamento/Compra">
                                                             <i className="bi bi-cart3 me-1"></i>
                                                             <span className="d-md-none">{t.data.substring(0, 5)}</span>
                                                             <span className="d-none d-md-inline">{t.data}</span>
                                                         </span>
                                                     )}
-                                                    <span className={`${vencStatusClass} d-flex align-items-center`} title={isCartao ? "Data de Vencimento" : "Data da Transação"}>
+                                                    <span className={`${vencStatusClass} d-flex align-items-center`} title="Vencimento / Pagamento">
                                                         <i className={`bi ${vencIcon} me-1`}></i>
                                                         <span style={{ fontSize: '0.75rem' }}>{vencText}</span>
                                                     </span>
                                                 </div>
 
-                                                {/* 6. TAGS DE CATEGORIA E STATUS */}
                                                 <div className="d-flex flex-wrap gap-1" style={{ flex: '1 1 auto', minWidth: '80px' }}>
                                                     {t.split && t.split.length > 0 ? (
                                                         t.split.map((p: any, idx: number) => (
@@ -469,21 +456,15 @@ export default function Transactions() {
                                                     {isPagamento && <span className="badge bg-info bg-opacity-25 text-info border border-info border-opacity-50" style={{ fontSize: '0.7rem' }}>Pagamento</span>}
 
                                                     {!isPositive && !isPagamento && (
-                                                        <>
-                                                            {!isCartao ? (
-                                                                <span className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50" style={{ fontSize: '0.7rem' }}><i className="bi bi-check2-all me-1"></i>Pago</span>
+                                                        isPago ? (
+                                                            <span className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50" style={{ fontSize: '0.7rem' }}><i className="bi bi-check2-all me-1"></i>Pago</span>
+                                                        ) : (
+                                                            (vencDate && vencDate < hoje) ? (
+                                                                <span className="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50" style={{ fontSize: '0.7rem' }}><i className="bi bi-exclamation-triangle-fill me-1"></i>Atrasado</span>
                                                             ) : (
-                                                                isPago ? (
-                                                                    <span className="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50" style={{ fontSize: '0.7rem' }}><i className="bi bi-check2-all me-1"></i>Pago</span>
-                                                                ) : (
-                                                                    (parseDateBR(t.dataVencimento || t.data) && parseDateBR(t.dataVencimento || t.data)! < hoje) ? (
-                                                                        <span className="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50" style={{ fontSize: '0.7rem' }}><i className="bi bi-exclamation-triangle-fill me-1"></i>Pendente</span>
-                                                                    ) : (
-                                                                        <span className="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-50" style={{ fontSize: '0.7rem' }}>Na Fatura</span>
-                                                                    )
-                                                                )
-                                                            )}
-                                                        </>
+                                                                <span className="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-50" style={{ fontSize: '0.7rem' }}>{isCartao ? 'Na Fatura' : 'Pendente'}</span>
+                                                            )
+                                                        )
                                                     )}
                                                 </div>
                                             </div>
@@ -528,17 +509,16 @@ export default function Transactions() {
                 }}
             />
 
-            {modalEdit.show && <TransactionEditModal transaction={modalEdit.transaction} onClose={() => setModalEdit({ show: false, transaction: null })} accounts={accounts} categories={categories} refreshData={forceUpdate} />}
+            {modalEdit.show && <TransactionEditModal transaction={modalEdit.transaction} onClose={() => setModalEdit({ show: false, transaction: null })} accounts={accounts} categories={categories} localRefresh={forceUpdate} />}
 
             {modalMassSplit.show && (
                 <MassSplitModal
                     selectedIds={selectedIds}
                     categories={categories}
-                    refreshData={forceUpdate}
+                    localRefresh={forceUpdate}
                     onClose={() => {
                         setModalMassSplit({ show: false });
                         setSelectedIds(new Set());
-                        forceUpdate();
                     }}
                 />
             )}
@@ -547,20 +527,68 @@ export default function Transactions() {
 }
 
 // =========================================================
-// SUB-COMPONENTE: MODAL DE EDIÇÃO E CRIAÇÃO (COM RATEIO)
+// SUB-COMPONENTE: MODAL DE EDIÇÃO E CRIAÇÃO
 // =========================================================
-function TransactionEditModal({ transaction, onClose, accounts, categories, refreshData }: any) {
+function TransactionEditModal({ transaction, onClose, accounts, categories, localRefresh }: any) {
     const isNew = !transaction;
 
     const [desc, setDesc] = useState(isNew ? '' : (transaction.nome || ''));
     const [valorVisual, setValorVisual] = useState(isNew ? '' : Math.abs(transaction.valor || 0).toString());
+    const [accountId, setAccountId] = useState(isNew ? (accounts[0]?.id || '') : (transaction.account_id || ''));
+    const [isReceita, setIsReceita] = useState(isNew ? false : (transaction.valor >= 0));
+
+    // 1. Lançamento / Compra
     const [dataIso, setDataIso] = useState(() => {
         if (isNew || !transaction.data) return new Date().toISOString().split('T')[0];
         const [d, m, y] = transaction.data.split('/');
         return `${y}-${m}-${d}`;
     });
-    const [accountId, setAccountId] = useState(isNew ? (accounts[0]?.id || '') : (transaction.account_id || ''));
-    const [isReceita, setIsReceita] = useState(isNew ? false : (transaction.valor >= 0));
+    
+    // 2. Vencimento
+    const [dataVencIso, setDataVencIso] = useState(() => {
+        const rawVenc = transaction?.dataVencimento && transaction.dataVencimento !== 'undefined' ? transaction.dataVencimento : transaction?.data;
+        if (isNew || !rawVenc) return new Date().toISOString().split('T')[0];
+        const [d, m, y] = rawVenc.split('/');
+        return `${y}-${m}-${d}`;
+    });
+
+    // 3. Pagamento (Vazio = Pendente/Atrasado)
+    const [dataPagIso, setDataPagIso] = useState(() => {
+        if (!isNew && transaction.dataPagamento) {
+            const [d, m, y] = transaction.dataPagamento.split('/');
+            return `${y}-${m}-${d}`;
+        }
+        if (isNew) {
+            // Nova CC: Pagamento vazio. Nova Conta: Pagamento = Hoje.
+            const isCartaoInit = accounts.length > 0 && cardsDb.getAll().some((c: any) => c.id === (transaction?.account_id || accounts[0]?.id));
+            return isCartaoInit ? '' : new Date().toISOString().split('T')[0];
+        }
+        return '';
+    });
+
+    // AUTO-CÁLCULO DE VENCIMENTO: Dispara ao trocar a Conta ou a Data de Compra
+    useEffect(() => {
+        const isCartao = cardsDb.getAll().some((c: any) => c.id === accountId);
+        if (isCartao && dataIso) {
+            const card = cardsDb.getAll().find((c: any) => c.id === accountId);
+            if (card) {
+                const [y, m, d] = dataIso.split('-');
+                let diaCompra = parseInt(d, 10);
+                let mesFatura = parseInt(m, 10);
+                let anoFatura = parseInt(y, 10);
+                const fechamento = parseInt((card as any).closingDay || (card as any).diaFechamento || '1', 10);
+                const vencimento = parseInt((card as any).dueDay || (card as any).diaVencimento || '10', 10);
+
+                if (diaCompra >= fechamento) {
+                    mesFatura++;
+                    if (mesFatura > 12) { mesFatura = 1; anoFatura++; }
+                }
+                setDataVencIso(`${anoFatura}-${String(mesFatura).padStart(2, '0')}-${String(vencimento).padStart(2, '0')}`);
+            }
+        } else if (!isCartao && dataIso) {
+            setDataVencIso(dataIso);
+        }
+    }, [accountId, dataIso]);
 
     const [isSplit, setIsSplit] = useState(!isNew && transaction.split && transaction.split.length > 0);
     const [singleCategory, setSingleCategory] = useState(isNew ? 'Não classificada' : (transaction.categoria || 'Não classificada'));
@@ -571,33 +599,42 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
         const multiplier = isReceita ? 1 : -1;
         const valorFinalVisual = parseFloat(valorVisual);
 
-        if (!desc || isNaN(valorFinalVisual) || !dataIso || !accountId) return alert("Preencha os obrigatórios.");
+        if (!desc || isNaN(valorFinalVisual) || !dataIso || !dataVencIso || !accountId) return alert("Preencha os campos obrigatórios.");
 
         const [y, m, d] = dataIso.split('-');
         const dataBR = `${d}/${m}/${y}`;
+        
+        const [vy, vm, vd] = dataVencIso.split('-');
+        const dataVencBR = `${vd}/${vm}/${vy}`;
 
-        // Sincroniza o tipo se classificado manualmente
+        let dataPagBR = '';
+        if (dataPagIso) {
+            const [py, pm, pd] = dataPagIso.split('-');
+            dataPagBR = `${pd}/${pm}/${py}`;
+        }
+
         let finalTipo = isNew ? (isReceita ? 'Receita Manual' : 'Despesa Manual') : transaction?.tipo || '';
         if (singleCategory === 'Pagamento de Fatura') finalTipo = 'Pagamento de Fatura';
 
-        const isCartao = cardsDb.getAll().some(c => c.id === accountId);
+        const isCartao = cardsDb.getAll().some((c: any) => c.id === accountId);
+        
+        // Deriva o status invisivelmente para manter os Dashboards funcionando
+        const statusDerivado = dataPagBR ? 'pago' : 'pendente';
 
         let finalTransaction: any = {
             identificador: isNew ? `manual-${generateUUID()}` : transaction.identificador,
             data: dataBR,
-            dataVencimento: isNew ? dataBR : (transaction.dataVencimento || dataBR),
-            dataPagamento: isNew ? dataBR : (transaction.dataPagamento || dataBR),
+            dataVencimento: dataVencBR,
+            dataPagamento: dataPagBR,
             nome: desc,
             valor: valorFinalVisual * multiplier,
             account_id: accountId,
             tipoLancamento: isNew ? (isCartao ? 'cartao' : 'conta') : transaction.tipoLancamento,
-            status: isNew ? (isCartao ? 'pendente' : 'pago') : transaction.status,
+            status: statusDerivado,
             tipo: finalTipo
         };
 
-        let novaTransacao: any = {
-            ...finalTransaction
-        };
+        let novaTransacao: any = { ...finalTransaction };
 
         if (isSplit) {
             let somaFatias = 0;
@@ -622,13 +659,12 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
             const idx = allT.findIndex((t: any) => t.identificador === transaction.identificador);
             if (idx > -1) {
                 allT[idx] = { ...allT[idx], ...novaTransacao };
-                // TRAVA: Destrói o array de split zumbi se a transação voltou a ser categoria única
                 if (!isSplit) delete allT[idx].split;
             }
         }
 
         db.save(allT);
-        refreshData();
+        localRefresh();
         onClose();
     };
 
@@ -661,13 +697,26 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
                             </div>
 
                             <div className="row mb-3">
-                                <div className="col-md-8 mb-3 mb-md-0">
+                                <div className="col-md-12 mb-3">
                                     <label className="form-label fw-bold text-muted small text-uppercase">Descrição</label>
                                     <input type="text" className="form-control" value={desc || ''} onChange={e => setDesc(e.target.value)} required />
                                 </div>
-                                <div className="col-md-4">
-                                    <label className="form-label fw-bold text-muted small text-uppercase">Data</label>
+                            </div>
+
+                            {/* NOVO SISTEMA DE DATAS (SEM SELECT DE STATUS) */}
+                            <div className="row mb-3">
+                                <div className="col-md-4 mb-3 mb-md-0">
+                                    <label className="form-label fw-bold text-muted small text-uppercase" title="Data da Compra ou Lançamento">Lançamento</label>
                                     <input type="date" className="form-control text-light" value={dataIso || ''} onChange={e => setDataIso(e.target.value)} required />
+                                </div>
+                                <div className="col-md-4 mb-3 mb-md-0">
+                                    <label className="form-label fw-bold text-warning small text-uppercase" title="Data limite para pagamento">Vencimento</label>
+                                    <input type="date" className="form-control text-warning fw-bold border-warning border-opacity-50" value={dataVencIso || ''} onChange={e => setDataVencIso(e.target.value)} required />
+                                </div>
+                                <div className="col-md-4">
+                                    <label className="form-label fw-bold text-success small text-uppercase" title="Deixe vazio para constar como Pendente/Atrasado">Pagamento Realizado</label>
+                                    <input type="date" className="form-control text-success fw-bold border-success border-opacity-50" value={dataPagIso || ''} onChange={e => setDataPagIso(e.target.value)} />
+                                    <small className="text-muted" style={{ fontSize: '0.65rem' }}>Se vazio = Pendente</small>
                                 </div>
                             </div>
 
@@ -737,7 +786,7 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, refr
 // =========================================================
 // SUB-COMPONENTE: MODAL DE RATEIO EM MASSA
 // =========================================================
-function MassSplitModal({ selectedIds, categories, onClose, refreshData }: any) {
+function MassSplitModal({ selectedIds, categories, onClose, localRefresh }: any) {
     const [splits, setSplits] = useState([{ categoria: '', pct: '50' }, { categoria: '', pct: '50' }]);
     const totalPct = splits.reduce((acc, s) => acc + (parseFloat(s.pct) || 0), 0);
 
@@ -771,7 +820,7 @@ function MassSplitModal({ selectedIds, categories, onClose, refreshData }: any) 
         });
 
         db.save(allT);
-        refreshData();
+        localRefresh();
         alert(`${count} transações rateadas com sucesso!`);
         onClose();
     };
