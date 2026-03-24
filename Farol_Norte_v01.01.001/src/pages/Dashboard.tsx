@@ -35,6 +35,7 @@ interface ChartInstances {
     cat?: Chart | null;
     evol?: Chart | null;
     catEvol?: Chart | null;
+    trend?: Chart | null; // NOVO: Gráfico de Tendência
 }
 
 export default function Dashboard() {
@@ -71,6 +72,7 @@ export default function Dashboard() {
     const chartCategoriasRef = useRef<HTMLCanvasElement | null>(null);
     const chartEvolucaoRef = useRef<HTMLCanvasElement | null>(null);
     const chartCategoryEvolRef = useRef<HTMLCanvasElement | null>(null);
+    const chartTendenciaRef = useRef<HTMLCanvasElement | null>(null);
     const chartInstances = useRef<ChartInstances>({});
 
     // ==========================================
@@ -108,39 +110,82 @@ export default function Dashboard() {
         });
     }, [transactions, selectedMonth, currentAccountId]);
 
-    const kpi = useMemo(() => {
-        let receitas = 0, despesas = 0, pendentes = 0;
-        
-        currentMonthData.forEach((t: any) => {
-            if (t.valor > 0) {
-                receitas += t.valor;
-            } else {
-                const absVal = Math.abs(t.valor);
-                despesas += absVal;
-                if (t.status !== 'pago') pendentes += absVal;
-            }
-        });
-
-        const saldo = receitas - despesas;
-        const economia = receitas > 0 ? ((saldo / receitas) * 100).toFixed(1) : "0.0";
-        const endividamento = receitas > 0 ? ((pendentes / receitas) * 100).toFixed(1) : (pendentes > 0 ? "100+" : "0.0");
+    const { kpi, trendData } = useMemo(() => {
+        let receitasMes = 0, despesasMes = 0;
+        let totalReceitasHistorico = 0;
+        let mesesComReceita = new Set();
+        let saldoAtual = 0, dividasFuturas = 0, atrasadas = 0;
 
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
-        let atrasadas = 0;
+
+        // Estrutura temporal para a projeção (Próximos 6 meses)
+        const projection = Array.from({ length: 6 }, (_, i) => {
+            const d = new Date(hoje.getFullYear(), hoje.getMonth() + i + 1, 1);
+            return {
+                iso: d.toISOString().slice(0, 7),
+                label: d.toLocaleString('pt-BR', { month: 'short' }).toUpperCase(),
+                despesasAgendadas: 0,
+                saldoFinal: 0
+            };
+        });
 
         transactions.forEach((t: any) => {
             if (currentAccountId !== "all" && t.account_id !== currentAccountId) return;
-            if (t.valor >= 0 || t.status === 'pago' || isPagamentoFatura(t)) return;
-            
-            const venc = parseDateBR(t.dataVencimento || t.data);
-            if (venc && venc < hoje) {
-                atrasadas += Math.abs(t.valor);
+            if (isPagamentoFatura(t)) return;
+
+            const isReceita = t.valor > 0;
+            const absVal = Math.abs(t.valor);
+            const tDate = parseDateBR(t.data);
+            const vencDate = parseDateBR(t.dataVencimento || t.data);
+            const tMesIso = t.data?.split('/').slice(1).reverse().join('-');
+
+            // 1. Saldo Atual (Fluxo de Caixa Realizado)
+            if (t.tipoLancamento !== 'cartao' && t.status === 'pago' && tDate && tDate <= hoje) {
+                saldoAtual += t.valor;
+            }
+
+            // 2. Média Móvel de Receita (Base para Endividamento Global)
+            if (isReceita && t.status === 'pago') {
+                totalReceitasHistorico += t.valor;
+                if (tMesIso) mesesComReceita.add(tMesIso);
+            }
+
+            // 3. Indicadores do Mês Selecionado (Uso da Renda)
+            if (tMesIso === selectedMonth) {
+                if (isReceita) receitasMes += t.valor;
+                else despesasMes += absVal; // Pega TODAS as despesas (pagas ou pendentes)
+            }
+
+            // 4. Mapeamento de Passivo Global e Projeção
+            if (!isReceita && t.status !== 'pago') {
+                dividasFuturas += absVal;
+                if (vencDate && vencDate < hoje) atrasadas += absVal;
+
+                // Aloca a despesa no mês correto do gráfico de tendência
+                const projIdx = projection.findIndex(p => p.iso === tMesIso);
+                if (projIdx > -1) projection[projIdx].despesasAgendadas += absVal;
             }
         });
 
-        return { receitas, despesas, saldo, economia, pendentes, endividamento, atrasadas };
-    }, [currentMonthData, transactions, currentAccountId]);
+        // Cálculos Finais de KPI
+        const receitaMedia = mesesComReceita.size > 0 ? totalReceitasHistorico / mesesComReceita.size : 0;
+        const usoDaRenda = receitasMes > 0 ? ((despesasMes / receitasMes) * 100).toFixed(1) : (despesasMes > 0 ? "100+" : "0.0");
+        const taxaEndividamento = receitaMedia > 0 ? ((dividasFuturas / receitaMedia) * 100).toFixed(1) : (dividasFuturas > 0 ? "100+" : "0.0");
+        
+        // Geração da Linha de Tendência (Rolling Balance)
+        let saldoProjetado = saldoAtual;
+        projection.forEach(p => {
+            saldoProjetado += receitaMedia; // Assume a receita média como constante
+            saldoProjetado -= p.despesasAgendadas; // Abate as faturas já mapeadas
+            p.saldoFinal = saldoProjetado;
+        });
+
+        return {
+            kpi: { receitas: receitasMes, despesas: despesasMes, saldo: receitasMes - despesasMes, usoDaRenda, taxaEndividamento, atrasadas, dividasFuturas },
+            trendData: projection
+        };
+    }, [currentMonthData, transactions, currentAccountId, selectedMonth]);
 
     const handleMonthChange = (novoMes: string) => {
         setSelectedMonth(novoMes);
@@ -266,6 +311,58 @@ export default function Dashboard() {
 
         return () => chartInstances.current.evol?.destroy();
     }, [currentMonthData, selectedMonth]);
+
+
+    // ==========================================
+    // GRÁFICO NOVO: TENDÊNCIA E FORECASTING
+    // ==========================================
+    useEffect(() => {
+        if (!chartTendenciaRef.current || trendData.length === 0) return;
+        if (chartInstances.current.trend) chartInstances.current.trend.destroy();
+
+        const labels = trendData.map(p => p.label);
+        const saldos = trendData.map(p => p.saldoFinal);
+        const despesas = trendData.map(p => p.despesasAgendadas);
+
+        chartInstances.current.trend = new Chart(chartTendenciaRef.current, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'Saldo Projetado',
+                        data: saldos,
+                        borderColor: '#F2B705',
+                        backgroundColor: 'rgba(242, 183, 5, 0.2)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        yAxisID: 'y'
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Faturas/Agendamentos',
+                        data: despesas,
+                        backgroundColor: 'rgba(220, 53, 69, 0.5)',
+                        borderRadius: 4,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { type: 'linear', display: true, position: 'left', ticks: { callback: (val) => `R$ ${val}` } },
+                    y1: { type: 'linear', display: false, position: 'right', grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+
+        return () => chartInstances.current.trend?.destroy();
+    }, [trendData]);
 
     // ==========================================
     // GRÁFICO 3: EVOLUÇÃO POR CATEGORIA
@@ -562,8 +659,8 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Linha 2: Indicadores de Endividamento e Alertas */}
-                <div className="col-12 col-md-6">
+                {/* Linha 2: Endividamento Global e Alertas */}
+                <div className="col-12 col-md-4">
                     <div className={`theme-surface border-start border-4 ${kpi.atrasadas > 0 ? 'border-danger bg-danger bg-opacity-10' : 'border-secondary'} shadow-sm h-100 py-2 radius-12`}>
                         <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
                             <div>
@@ -578,17 +675,27 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
-                <div className="col-12 col-md-6">
+                <div className="col-12 col-md-4">
                     <div className="theme-surface border-start border-4 border-warning shadow-sm h-100 py-2 radius-12">
                         <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
                             <div>
-                                <div className="text-uppercase text-warning fw-bold small">Renda Comprometida</div>
-                                <div className="h4 mb-0 fw-bold text-light">
-                                    {kpi.endividamento}% 
-                                    <span className="fs-6 fw-normal text-muted ms-2 d-none d-md-inline">({formatCurrency(kpi.pendentes)} em aberto)</span>
-                                </div>
+                                <div className="text-uppercase text-warning fw-bold small">Uso da Renda (Mês)</div>
+                                <div className="h4 mb-0 fw-bold text-light">{kpi.usoDaRenda}%</div>
                             </div>
                             <i className="bi bi-pie-chart fs-1 text-warning opacity-25"></i>
+                        </div>
+                    </div>
+                </div>
+                <div className="col-12 col-md-4">
+                    <div className="theme-surface border-start border-4 border-danger shadow-sm h-100 py-2 radius-12">
+                        <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div className="text-uppercase text-danger fw-bold small">Taxa de Endividamento</div>
+                                <div className="h4 mb-0 fw-bold text-light">
+                                    {kpi.taxaEndividamento}% <span className="fs-6 fw-normal text-muted ms-1 d-none d-xl-inline">({formatCurrency(kpi.dividasFuturas)})</span>
+                                </div>
+                            </div>
+                            <i className="bi bi-graph-down-arrow fs-1 text-danger opacity-25"></i>
                         </div>
                     </div>
                 </div>
@@ -735,12 +842,26 @@ export default function Dashboard() {
                 </div>
             </div>
             
-            {/* GRÁFICO EVOLUÇÃO MENSAL */}
-            <div className="theme-surface shadow-sm mb-4">
-                <div className="card-header bg-transparent border-bottom border-secondary border-opacity-25 fw-bold py-3 px-4">Evolução Mensal (Receitas x Despesas)</div>
-                <div className="card-body p-4">
-                    <div className="h-300">
-                        <canvas ref={chartEvolucaoRef}></canvas>
+            {/* GRÁFICOS: PROJEÇÃO FUTURA E EVOLUÇÃO MENSAL */}
+            <div className="row mb-4 g-3">
+                <div className="col-md-6">
+                    <div className="theme-surface shadow-sm h-100">
+                        <div className="card-header bg-transparent border-bottom border-secondary border-opacity-25 fw-bold py-3 px-4">Projeção de Saldo (Próximos 6 Meses)</div>
+                        <div className="card-body p-4">
+                            <div className="h-300">
+                                <canvas ref={chartTendenciaRef}></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div className="col-md-6">
+                    <div className="theme-surface shadow-sm h-100">
+                        <div className="card-header bg-transparent border-bottom border-secondary border-opacity-25 fw-bold py-3 px-4">Evolução Mensal (Receitas x Despesas)</div>
+                        <div className="card-body p-4">
+                            <div className="h-300">
+                                <canvas ref={chartEvolucaoRef}></canvas>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
