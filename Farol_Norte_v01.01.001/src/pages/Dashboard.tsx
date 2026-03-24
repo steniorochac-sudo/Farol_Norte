@@ -119,6 +119,18 @@ export default function Dashboard() {
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
 
+        // === LINHA DE CORTE DINÂMICA (Time Travel) ===
+        const [selAno, selMes] = selectedMonth.split('-');
+        let dataLimiteAtraso = new Date(parseInt(selAno), parseInt(selMes), 0); // Último dia do mês selecionado
+        dataLimiteAtraso.setHours(23, 59, 59, 999);
+
+        // Se estiver no mês corrente, a régua de atraso volta a ser HOJE
+        if (selAno === String(hoje.getFullYear()) && selMes === String(hoje.getMonth() + 1).padStart(2, '0')) {
+            dataLimiteAtraso = new Date(hoje);
+            dataLimiteAtraso.setHours(0, 0, 0, 0); 
+        }
+        // ==============================================
+
         // Estrutura temporal para a projeção (Próximos 6 meses)
         const projection = Array.from({ length: 6 }, (_, i) => {
             const d = new Date(hoje.getFullYear(), hoje.getMonth() + i + 1, 1);
@@ -151,16 +163,21 @@ export default function Dashboard() {
                 if (tMesIso) mesesComReceita.add(tMesIso);
             }
 
-            // 3. Indicadores do Mês Selecionado (Uso da Renda)
+            // 3. Indicadores do Mês Selecionado (Uso da Renda Local)
             if (tMesIso === selectedMonth) {
                 if (isReceita) receitasMes += t.valor;
-                else despesasMes += absVal; // Pega TODAS as despesas (pagas ou pendentes)
+                else despesasMes += absVal; // Pega TODAS as despesas (pagas ou pendentes) do mês
             }
 
             // 4. Mapeamento de Passivo Global e Projeção
             if (!isReceita && t.status !== 'pago') {
                 dividasFuturas += absVal;
-                if (vencDate && vencDate < hoje) atrasadas += absVal;
+                
+                // === AVALIAÇÃO DE ATRASO RETROATIVA ===
+                // Verifica se a conta venceu ANTES do fim do mês que está sendo visualizado
+                if (vencDate && vencDate < dataLimiteAtraso) {
+                    atrasadas += absVal;
+                }
 
                 // Aloca a despesa no mês correto do gráfico de tendência
                 const projIdx = projection.findIndex(p => p.iso === tMesIso);
@@ -176,7 +193,7 @@ export default function Dashboard() {
         // Geração da Linha de Tendência (Rolling Balance)
         let saldoProjetado = saldoAtual;
         projection.forEach(p => {
-            saldoProjetado += receitaMedia; // Assume a receita média como constante
+            saldoProjetado += receitaMedia; // Assume a receita média como constante projetada
             saldoProjetado -= p.despesasAgendadas; // Abate as faturas já mapeadas
             p.saldoFinal = saldoProjetado;
         });
@@ -331,7 +348,7 @@ export default function Dashboard() {
                 datasets: [
                     {
                         type: 'line',
-                        label: 'Saldo Projetado',
+                        label: 'Saldo Projetado (R$)',
                         data: saldos,
                         borderColor: '#F2B705',
                         backgroundColor: 'rgba(242, 183, 5, 0.2)',
@@ -342,7 +359,7 @@ export default function Dashboard() {
                     },
                     {
                         type: 'bar',
-                        label: 'Faturas/Agendamentos',
+                        label: 'Despesas/Faturas Agendadas',
                         data: despesas,
                         backgroundColor: 'rgba(220, 53, 69, 0.5)',
                         borderRadius: 4,
@@ -865,7 +882,6 @@ export default function Dashboard() {
                     </div>
                 </div>
             </div>
-
         </div>
     );
 }
