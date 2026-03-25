@@ -1,0 +1,335 @@
+{
+  "accounts": [
+    {
+      "id": "sfsfsd",
+      "nome": "Nubank - Stênio",
+      "tipo": "conta",
+      "bankType": "nubank",
+      "saldo_inicial": 0,
+      "saldo": 41.36,
+      "saldoInicial": 41.36
+    },
+    {
+      "id": "acc-1767223419493",
+      "nome": "BancoInter",
+      "bankType": "inter",
+      "saldo": 0
+    }
+  ],
+  "credit_cards": [
+    {
+      "id": "962e1015-4d3d-4d74-8aa8-411889fe7fdd",
+      "nome": "CartãoNubank",
+      "account_id": "sfsfsd",
+      "closingDay": "5",
+      "dueDay": "12",
+      "limit": 0
+    },
+    {
+      "id": "card-1767223465052",
+      "nome": "InterAni",
+      "closingDay": "05",
+      "dueDay": "12",
+      "account_id": "acc-1767223419493"
+    }
+  ],
+  "categories": [
+    {
+      "id": "alim",
+      "nome": "Alimentação",
+      "cor": "#dc3545",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "bbr",
+      "nome": "Bbr",
+      "cor": "#e5ff1f",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "condominio/agua",
+      "nome": "Condominio/Agua",
+      "cor": "#1789ee",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "emprestimos-obt",
+      "nome": "Emprestei e me Pagaram",
+      "cor": "#6d7e6d",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "empréstimos-pag",
+      "nome": "Peguei Emprestado e Paguei",
+      "cor": "#d2374f",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "energia",
+      "nome": "Energia",
+      "cor": "#00fffb",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "estudos",
+      "nome": "Estudos",
+      "cor": "#aabf40",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "investimento",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "gasolina",
+      "nome": "Gasolina",
+      "cor": "#e3cd64",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "green",
+      "nome": "Green",
+      "cor": "#2ed175",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "ifood",
+      "nome": "Ifood",
+      "cor": "#e61919",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "internet",
+      "nome": "Internet",
+      "cor": "#7b2bf3",
+      "tipo": "despesa",
+      "natureza": "fixa",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "investimentos",
+      "nome": "Investimentos",
+      "cor": "#53e71d",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "investimento",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "lazer",
+      "nome": "Lazer",
+      "cor": "#198754",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "limpeza",
+      "nome": "Limpeza",
+      "cor": "#6da4d5",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "moradia",
+      "nome": "Moradia",
+      "cor": "#fd7e14",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "moto",
+      "nome": "Moto",
+      "cor": "#6e7e6d",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "presentes",
+      "nome": "Presentes",
+      "cor": "#cc33bf",
+      "tipo": "despesa",
+      "natureza": "eventual",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "salario",
+      "nome": "Salário",
+      "cor": "#198754",
+      "tipo": "receita",
+      "natureza": "fixa",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "saúde",
+      "nome": "Saúde",
+      "cor": "#56a1f0",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "seguros",
+      "nome": "Seguros",
+      "cor": "#0d82e7",
+      "tipo": "despesa",
+      "natureza": "fixa",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "telefone",
+      "nome": "Telefone",
+      "cor": "#ba1717",
+      "tipo": "despesa",
+      "natureza": "fixa",
+      "relevancia": "essencial",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "transp",
+      "nome": "Transporte",
+      "cor": "#0d6efd",
+      "tipo": "despesa",
+      "natureza": "variavel",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    },
+    {
+      "id": "confraternizaçõ",
+      "nome": "Confraternizações trabalho",
+      "cor": "#915a36",
+      "tipo": "despesa",
+      "natureza": "eventual",
+      "relevancia": "estilo_vida",
+      "nature": "variable",
+      "relevance": "essential"
+    }
+  ],
+  "categorization_rules": [
+    {
+      "term": "bar e mercearia harmon",
+      "category": "Bbr"
+    },
+    {
+      "term": "eronlemos",
+      "category": "Bbr"
+    },
+    {
+      "term": "ifood",
+      "category": "Ifood"
+    },
+    {
+      "term": "duolingo",
+      "category": "Estudos"
+    },
+    {
+      "term": "pedro paulo",
+      "category": "Green"
+    },
+    {
+      "term": "leilapastel",
+      "category": "Alimentação"
+    },
+    {
+      "term": "99app",
+      "category": "Transporte"
+    },
+    {
+      "term": "prime associacao",
+      "category": "Seguros"
+    },
+    {
+      "term": "bipa",
+      "category": "Investimentos"
+    },
+    {
+      "term": "neoenergia",
+      "category": "Energia"
+    },
+    {
+      "term": "gildasiosilveira",
+      "category": "Alimentação"
+    },
+    {
+      "term": "farmacia",
+      "category": "Saúde"
+    },
+    {
+      "term": "motos",
+      "category": "Moto"
+    },
+    {
+      "term": "he-net",
+      "category": "Internet"
+    },
+    {
+      "term": "claro",
+      "category": "Telefone"
+    }
+  ],
+  "theme": "light",
+  "selectedAccountId": "sfsfsd",
+  "dashboard_last_month": "2026-01",
+  "transactions_period_pref": "2026-02",
+  "creditcard_last_month": "2025-08"
+}

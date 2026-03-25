@@ -17,26 +17,27 @@ export class GenericParser implements IBankParser {
   parse(rows: Record<string, unknown>[], _accountId: string, _cardId?: string): ParsedRow[] {
     return rows
       .map((row, index) => {
-        const dateKey = Object.keys(row).find((key) => /date|data|data_lancamento|release_date/i.test(key));
-        const amountKey = Object.keys(row).find((key) => /amount|valor|value|net_amount/i.test(key));
-        const descKey = Object.keys(row).find((key) => /description|descricao|title|nome|transaction_type/i.test(key));
+        const dateKey = Object.keys(row).find((key) => /date|data|lancamento|lançamento|release/i.test(key));
+        const amountKey = Object.keys(row).find((key) => /amount|valor|value|net|saída|entrada/i.test(key));
+        const descKey = Object.keys(row).find((key) => /description|descrição|descricao|title|nome|transaction|histórico|historico|estabelecimento|detalhe/i.test(key));
 
         if (!dateKey || !amountKey) return null;
 
         let dataValue = row[dateKey] as string | undefined;
         const amountValue = row[amountKey] as string | number | undefined;
-        const descValue = descKey ? (row[descKey] as string | undefined) : undefined;
+        
+        let descValue = descKey ? (row[descKey] as string | undefined) : Object.values(row).join(' - ');
 
         if (!dataValue || !amountValue) return null;
 
-        dataValue = dataValue.split(' ')[0];
-        dataValue = dataValue.replace(/-/g, '/');
+        // Apenas corta horários embutidos. DEIXA OS TRAÇOS INTACTOS.
+        dataValue = dataValue.split(' ')[0]; 
 
         let valor = typeof amountValue === 'string' ? parseMoney(amountValue) : amountValue;
-        const nome = formatarNome(descValue || 'Transação');
+        const nome = formatarNome(descValue || 'Transação Indefinida');
 
         return {
-          data: dataValue,
+          data: dataValue, 
           nome,
           valor,
           identificador: gerarFingerprint('generic', dataValue, valor, nome, index),

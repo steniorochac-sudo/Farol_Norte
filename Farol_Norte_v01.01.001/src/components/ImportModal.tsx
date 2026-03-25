@@ -5,6 +5,7 @@ import { useFinance } from '../context/FinanceContext';
 import { db, cardsDb, rulesDb } from '../services/DataService';
 import { BankStrategyFactory, BANK_STRATEGIES } from '../services/BankStrategies';
 import { OfxParser } from '../services/parsers/OfxParser'; 
+import { generateUUID } from '../utils/helpers';
 
 interface ImportModalProps {
     show: boolean;
@@ -14,17 +15,14 @@ interface ImportModalProps {
 export default function ImportModal({ show, onClose }: ImportModalProps) {
     const { accounts, refreshData } = useFinance();
     
-    // Estados Reativos do Modal
     const [selectedAccountId, setSelectedAccountId] = useState<string>('');
     const [importTarget, setImportTarget] = useState<string>('');
     const [files, setFiles] = useState<File[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     
-    // Estados Calculados
     const [detectedBank, setDetectedBank] = useState<string>('generic');
     const [accountCards, setAccountCards] = useState<any[]>([]);
 
-    // Sempre que a conta mudar, atualiza as opções de cartão e detecta o banco
     useEffect(() => {
         if (!selectedAccountId) {
             setAccountCards([]);
@@ -49,99 +47,113 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
         try {
             const isCreditCard = importTarget !== 'ACCOUNT';
             const targetId = isCreditCard ? importTarget : selectedAccountId;
-            
             const strategy = BankStrategyFactory.getStrategy(detectedBank);
-            let todasTransacoes: any[] = [];
+            let transacoesExtraidasBrutas: any[] = [];
 
+            // ========================================================
+            // FASE 1: EXTRAÇÃO BURRA (Parsers apenas leem o texto)
+            // ========================================================
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const isPdf = file.name.toLowerCase().endsWith(".pdf");
-                const isOfx = file.name.toLowerCase().endsWith(".ofx"); // NOVO INTERCEPTADOR
-                let transacoesDoArquivo: any[] = [];
+                const isOfx = file.name.toLowerCase().endsWith(".ofx");
+                let extraidasDoArquivo: any[] = [];
 
                 if (isOfx) {
-                    // === ROTA EXPRESSA: OFX UNIVERSAL ===
                     const rawText = await file.text();
                     const ofxParser = new OfxParser();
-                    transacoesDoArquivo = ofxParser.parseRawText(rawText, selectedAccountId, isCreditCard ? targetId : undefined);
-                    
+                    extraidasDoArquivo = ofxParser.parseRawText(rawText, selectedAccountId, isCreditCard ? targetId : undefined);
                 } else if (isPdf) {
-                    // Rota de PDF
-                    if (!(strategy as any).parsePDF) {
-                        throw new Error(`O modelo ${detectedBank} não suporta PDF (${file.name}).`);
-                    }
+                    if (!(strategy as any).parsePDF) throw new Error(`O modelo ${detectedBank} não suporta PDF (${file.name}).`);
                     const arrayBuffer = await file.arrayBuffer();
-                    transacoesDoArquivo = await (strategy as any).parsePDF(arrayBuffer, targetId);
-                    
+                    extraidasDoArquivo = await (strategy as any).parsePDF(arrayBuffer, targetId);
                 } else {
-                    // Rota padrão CSV (Mantém a trava de Extrato vs Fatura)
                     let cleanText = await file.text();
-                    
-                    if (typeof (strategy as any).preProcessText === 'function') {
-                        cleanText = (strategy as any).preProcessText(cleanText);
-                    }
-                    
+                    if (typeof (strategy as any).preProcessText === 'function') cleanText = (strategy as any).preProcessText(cleanText);
                     cleanText = cleanText.replace(/"/g, '');
 
-                    const parseResult = Papa.parse(cleanText, {
-                        header: true, 
-                        skipEmptyLines: true, 
-                        transformHeader: (h: string) => h.trim().toLowerCase()
-                    });
+                    const parseResult = Papa.parse(cleanText, { header: true, skipEmptyLines: true, transformHeader: (h: string) => h.trim().toLowerCase() });
 
                     if (parseResult.meta && parseResult.meta.fields && parseResult.data.length > 0) {
                         const colunas = parseResult.meta.fields.join(' ').toLowerCase();
-                        const isExtratoHeaders = colunas.includes('saldo') || colunas.includes('balance') || colunas.includes('release_date') || colunas.includes('net_amount') || colunas.includes('transaction_type');
+                        const isExtratoHeaders = colunas.includes('saldo') || colunas.includes('balance') || colunas.includes('release_date') || colunas.includes('net_amount');
                         const isFaturaHeaders = colunas.includes('cartão') || colunas.includes('cartao') || colunas.includes('estabelecimento') || colunas.includes('titular');
 
-                        if (isCreditCard && isExtratoHeaders && !isFaturaHeaders) {
-                            throw new Error(`O arquivo "${file.name}" é um EXTRATO bancário, mas você selecionou a importação de FATURA. Cancele e corrija o destino.`);
-                        }
-                        if (!isCreditCard && isFaturaHeaders && !isExtratoHeaders) {
-                            throw new Error(`O arquivo "${file.name}" é uma FATURA de cartão, mas você selecionou a importação de EXTRATO. Cancele e corrija o destino.`);
-                        }
+                        if (isCreditCard && isExtratoHeaders && !isFaturaHeaders) throw new Error(`O arquivo "${file.name}" é um EXTRATO bancário, mas você selecionou a importação de FATURA.`);
+                        if (!isCreditCard && isFaturaHeaders && !isExtratoHeaders) throw new Error(`O arquivo "${file.name}" é uma FATURA de cartão, mas você selecionou a importação de EXTRATO.`);
                     }
 
                     if (parseResult.data) {
-                        transacoesDoArquivo = strategy.parse(
-                            parseResult.data as Record<string, unknown>[], 
-                            selectedAccountId, 
-                            isCreditCard ? targetId : undefined
-                        );
+                        extraidasDoArquivo = strategy.parse(parseResult.data as Record<string, unknown>[], selectedAccountId, isCreditCard ? targetId : undefined);
                     }
                 }
 
-                if (transacoesDoArquivo.length > 0) {
-                    todasTransacoes = todasTransacoes.concat(transacoesDoArquivo);
-                }
+                if (extraidasDoArquivo.length > 0) transacoesExtraidasBrutas = transacoesExtraidasBrutas.concat(extraidasDoArquivo);
             }
 
-            if (todasTransacoes.length === 0) throw new Error("Nenhuma transação válida encontrada nos arquivos.");
+            if (transacoesExtraidasBrutas.length === 0) throw new Error("Nenhuma transação válida encontrada nos arquivos.");
 
-            let importedCount = 0;
-            const existingIds = new Set(db.getAll().map((t: any) => t.identificador));
+            // ========================================================
+            // FASE 2: O PIPELINE CENTRAL DE NORMALIZAÇÃO
+            // ========================================================
+            const existingTransactions = db.getAll();
             const novasParaSalvar: any[] = [];
+            let importedCount = 0;
 
-            todasTransacoes.forEach(tr => {
+            transacoesExtraidasBrutas.forEach((tr, index) => {
                 tr.account_id = selectedAccountId;
+                const rawValor = typeof tr.valor === 'number' ? tr.valor : parseFloat(tr.valor);
                 
-                // 1. BLINDAGEM DE DATAS (Corrige YYYY-MM-DD e DD-MM-YYYY inteligentemente)
-                if (tr.data && tr.data.includes('-')) {
-                    const parts = tr.data.split('-');
-                    if (parts[0].length === 4) {
-                        tr.data = `${parts[2]}/${parts[1]}/${parts[0]}`; // Era YYYY-MM-DD
-                    } else if (parts[2].length === 4) {
-                        tr.data = `${parts[0]}/${parts[1]}/${parts[2]}`; // Era DD-MM-YYYY
-                    }
+                // --- ESTÁGIO 1: FORMATAÇÃO DE DATAS ---
+                let rawDate = (tr.data || '').split(' ')[0]; 
+                const dateMatch = rawDate.match(/^(\d{2,4})[-\/](\d{2})[-\/](\d{2,4})/);
+                if (dateMatch) {
+                    const p1 = dateMatch[1], p2 = dateMatch[2], p3 = dateMatch[3];
+                    tr.data = p1.length === 4 ? `${p3.padStart(2, '0')}/${p2.padStart(2, '0')}/${p1}` : `${p1.padStart(2, '0')}/${p2.padStart(2, '0')}/${p3}`;
+                } else {
+                    tr.data = rawDate.replace(/-/g, '/');
                 }
-                tr.data = tr.data?.replace(/-/g, '/');
 
-                // 2. APLICAÇÃO DA NOVA ARQUITETURA DE DADOS
+                // --- ESTÁGIO 2: ANÁLISE SEMÂNTICA ---
+                const descLower = (tr.nome || '').toLowerCase();
+                const isPagamentoKeyword = descLower.includes('pagamento') || descLower.includes('fatura') || descLower.includes('pago') || descLower.includes('recebido');
+                const isEstornoKeyword = descLower.includes('estorno') || descLower.includes('reembolso') || descLower.includes('cancelamento');
+
+                // --- ESTÁGIO 3: MATEMÁTICA ABSOLUTA E TIPAGEM ---
                 if (isCreditCard) {
                     tr.tipoLancamento = 'cartao';
                     tr.card_id = targetId;
-                    tr.status = tr.valor < 0 ? 'pendente' : 'pago';
                     
+                    if (isPagamentoKeyword) {
+                        // Pagamento de fatura: Entra positivo (crédito) para abater o saldo devedor do cartão
+                        tr.valor = Math.abs(rawValor);
+                        tr.tipo = 'Pagamento de Fatura';
+                        tr.categoria = 'Pagamento de Fatura';
+                    } else if (isEstornoKeyword) {
+                        // Estorno: Entra positivo para devolver o limite
+                        tr.valor = Math.abs(rawValor);
+                        tr.tipo = 'Estorno/Reembolso';
+                    } else {
+                        // Compras Comuns: Blindado para sempre ser negativo (dívida), não importa como o banco envie
+                        tr.valor = -Math.abs(rawValor);
+                        tr.tipo = 'Despesa';
+                    }
+                } else {
+                    // Conta Corrente
+                    tr.tipoLancamento = 'conta';
+                    tr.valor = rawValor; // Mantém o sinal original da conta bancária
+                    
+                    if (isPagamentoKeyword && tr.valor < 0) {
+                        tr.tipo = 'Pagamento de Fatura';
+                        tr.categoria = 'Pagamento de Fatura';
+                    } else {
+                        tr.tipo = tr.valor > 0 ? 'Receita' : 'Despesa';
+                    }
+                }
+
+                // --- ESTÁGIO 4: VENCIMENTOS E PAGAMENTOS ---
+                if (isCreditCard) {
+                    tr.status = 'pendente';
                     const cardObj = cardsDb.getAll().find((c: any) => c.id === targetId);
                     if (cardObj && tr.data) {
                         const [dStr, mStr, yStr] = tr.data.split('/');
@@ -149,8 +161,8 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                         let mesFat = parseInt(mStr, 10);
                         let anoFat = parseInt(yStr, 10);
                         
-                        const fechamento = parseInt((cardObj as any).closingDay || '1', 10);
-                        const vencimento = parseInt((cardObj as any).dueDay || '10', 10);
+                        const fechamento = parseInt(String((cardObj as any).closingDay || (cardObj as any).diaFechamento || '1'), 10);
+                        const vencimento = parseInt(String((cardObj as any).dueDay || (cardObj as any).diaVencimento || '10'), 10);
                         
                         if (diaCompra >= fechamento) {
                             mesFat++;
@@ -159,16 +171,30 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                         tr.dataVencimento = `${String(vencimento).padStart(2, '0')}/${String(mesFat).padStart(2, '0')}/${anoFat}`;
                     }
                 } else {
-                    tr.tipoLancamento = 'conta';
                     tr.status = 'pago'; 
                     tr.dataVencimento = tr.data;
-                    tr.dataPagamento = tr.data;
+                    tr.dataPagamento = tr.data; 
                 }
 
-                if (tr.identificador && !existingIds.has(tr.identificador) && !novasParaSalvar.some(n => n.identificador === tr.identificador)) {
-                    rulesDb.apply(tr);
+                // --- ESTÁGIO 5: REASSINATURA UNIVERSAL ---
+                // Redefinimos a chave identificadora aqui para que o OFX, CSV e PDF gerem 
+                // rigorosamente o mesmo ID, tornando o sistema imune a transações duplicadas em reimportações.
+                tr.identificador = `auto-${tr.data}-${tr.valor}-${(tr.nome || '').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')}-${index}`;
+
+                // --- ESTÁGIO 6: ESCUDO ANTI-DUPLICIDADE HEURÍSTICO ---
+                const checkDuplicate = (arr: any[]) => arr.some((ext: any) => {
+                    if (ext.identificador === tr.identificador) return true;
+                    if (ext.account_id === tr.account_id && ext.data === tr.data && ext.valor === tr.valor) {
+                        const nomeExt = (ext.nome || '').toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 6);
+                        const nomeTr = (tr.nome || '').toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 6);
+                        if (nomeExt === nomeTr && nomeExt.length >= 3) return true;
+                    }
+                    return false;
+                });
+
+                if (!checkDuplicate(existingTransactions) && !checkDuplicate(novasParaSalvar)) {
+                    rulesDb.apply(tr); // Aplica as regras de categorização automática
                     novasParaSalvar.push(tr);
-                    existingIds.add(tr.identificador);
                     importedCount++;
                 }
             });
@@ -178,7 +204,7 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                 refreshData(); 
             }
 
-            alert(`✅ Concluído! \n📥 Importados: ${importedCount} \n(Ignorados ${todasTransacoes.length - importedCount} duplicados)`);
+            alert(`✅ Concluído! \n📥 Importados: ${importedCount} \n(Ignorados ${transacoesExtraidasBrutas.length - importedCount} duplicados)`);
             onClose(); 
             
         } catch (error: any) {
@@ -204,7 +230,7 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                         {isLoading && (
                             <div className="alert alert-info bg-info bg-opacity-10 border-info border-opacity-25 text-info d-flex align-items-center mb-4 radius-12 p-3">
                                 <span className="spinner-border spinner-border-sm me-3"></span>
-                                Processando arquivos e blindando dados, por favor aguarde...
+                                Aplicando Pipeline de Normalização, por favor aguarde...
                             </div>
                         )}
 
@@ -238,7 +264,7 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
                                             <input className="form-check-input mt-0 bg-transparent border-secondary" type="radio" name="importTarget" checked={importTarget === card.id} onChange={() => setImportTarget(card.id)} disabled={isLoading} style={{ transform: 'scale(1.2)' }} />
                                             <div>
                                                 <span className={`fw-bold d-block ${importTarget === card.id ? 'text-warning' : 'text-light'}`}><i className="bi bi-credit-card me-2"></i>Fatura: {card.nome}</span>
-                                                <small className="text-muted">Compras no Crédito (PDF/CSV)</small>
+                                                <small className="text-muted">Compras no Crédito (PDF/CSV/OFX)</small>
                                             </div>
                                         </label>
                                     ))}

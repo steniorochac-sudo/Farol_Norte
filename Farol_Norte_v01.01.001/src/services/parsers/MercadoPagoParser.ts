@@ -1,4 +1,4 @@
-// MercadoPagoParser.ts// src/services/parsers/MercadoPagoParser.ts
+// src/services/parsers/MercadoPagoParser.ts
 import { parseMoney, gerarFingerprint } from '../../utils/helpers';
 import { formatarNome } from '../../utils/formatters';
 import type { IBankParser, ParsedRow } from './types';
@@ -16,8 +16,8 @@ export class MercadoPagoParser implements IBankParser {
         let dataStr = row['release_date'] as string | undefined;
         
         if (dataStr) {
-            dataStr = dataStr.split(' ')[0];
-            dataStr = dataStr.replace(/-/g, '/');
+            // Apenas corta horários embutidos. DEIXA OS TRAÇOS INTACTOS.
+            dataStr = dataStr.split(' ')[0]; 
         }
 
         const descricao = row['transaction_type'] as string | undefined;
