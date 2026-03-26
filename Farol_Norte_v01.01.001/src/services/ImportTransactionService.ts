@@ -3,10 +3,6 @@ import type { Transaction, CreditCard } from '../types/index';
 import type { ParsedRow } from './parsers/types';
 
 export class ImportTransactionService {
-    /**
-     * Recebe os dados crus dos parsers (CSV, OFX, PDF) e aplica a lógica de negócios
-     * para formatar datas, inverter sinais de cartão, calcular vencimentos e barrar duplicatas.
-     */
     static normalizeAndFilter(
         rawTransactions: ParsedRow[],
         existingTransactions: Transaction[],
@@ -35,11 +31,6 @@ export class ImportTransactionService {
                 draft.data = rawDate.replace(/-/g, '/');
             }
 
-            // [ADICIONE ESTAS 3 LINHAS] Sincroniza a data do identificador
-            if (draft.identificador && draft.identificador.includes(rawDate) && rawDate !== draft.data) {
-                draft.identificador = draft.identificador.replace(rawDate, draft.data);
-            }
-
             // --- ESTÁGIO 2: DELEGAÇÃO SEMÂNTICA ---
             const tipoDefinidoPeloParser = draft.tipo || '';
 
@@ -48,13 +39,17 @@ export class ImportTransactionService {
                 draft.tipoLancamento = 'cartao';
                 draft.card_id = targetId;
                 
+                // Agora respeita integralmente as regras que o seu NubankParser definiu
                 if (tipoDefinidoPeloParser === 'Pagamento de Fatura') {
                     draft.valor = Math.abs(rawValor);
                     draft.categoria = 'Pagamento de Fatura';
-                } else if (tipoDefinidoPeloParser.includes('Estorno') || tipoDefinidoPeloParser.includes('Reembolso')) {
+                    draft.tipo = 'Pagamento de Fatura';
+                // Exigência estrita: ou tem a palavra Estorno/Reembolso, ou é EXATAMENTE 'Estorno/Crédito' (para não pegar 'Compra no Crédito')
+                } else if (tipoDefinidoPeloParser.includes('Estorno') || tipoDefinidoPeloParser === 'Estorno/Crédito' || tipoDefinidoPeloParser.includes('Reembolso')) {
                     draft.valor = Math.abs(rawValor);
+                    draft.tipo = 'Estorno/Reembolso';
                 } else {
-                    draft.valor = -Math.abs(rawValor); // Regra imutável: Cartão sempre sai negativo
+                    draft.valor = -Math.abs(rawValor);
                     draft.tipo = 'Despesa'; 
                 }
             } else {
@@ -64,6 +59,7 @@ export class ImportTransactionService {
                 
                 if (tipoDefinidoPeloParser === 'Pagamento de Fatura' && draft.valor < 0) {
                     draft.categoria = 'Pagamento de Fatura';
+                    draft.tipo = 'Pagamento de Fatura';
                 } else if (tipoDefinidoPeloParser.includes('Estorno') && draft.valor > 0) {
                     draft.tipo = 'Estorno/Reembolso';
                 } else {
@@ -97,8 +93,8 @@ export class ImportTransactionService {
             }
 
             // --- ESTÁGIO 5: REASSINATURA UNIVERSAL ---
+            // Se o Parser antigo enviou a assinatura dele (gerarFingerprint ou rawId), NÓS MANTEMOS INTACTA!
             if (!draft.identificador || draft.identificador.includes('generic') || draft.identificador.includes('hibrido')) {
-                // Preserva o sufixo original do parser (a linha do arquivo) para não perder a identidade matemática
                 const suffix = draft.identificador ? draft.identificador.substring(draft.identificador.lastIndexOf('-')) : `-${index}`;
                 draft.identificador = `auto-${draft.data}-${draft.valor}-${(draft.nome || '').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')}${suffix}`;
             }
@@ -120,10 +116,7 @@ export class ImportTransactionService {
                 return false;
             });
 
-            // 1. Contra o Banco de Dados (Passado): Usa força máxima (Absoluto + Heurístico)
             const blockedByDB = isAbsoluteDuplicate(existingTransactions) || isHeuristicDuplicate(existingTransactions);
-            
-            // 2. Contra o Arquivo Atual (Presente): Usa APENAS o Absoluto. Permite compras gêmeas (2 cafés no mesmo dia).
             const blockedByCurrentFile = isAbsoluteDuplicate(novasParaSalvar);
 
             if (!blockedByDB && !blockedByCurrentFile) {

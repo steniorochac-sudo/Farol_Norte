@@ -7,13 +7,26 @@
       "bankType": "nubank",
       "saldo_inicial": 0,
       "saldo": 41.36,
-      "saldoInicial": 41.36
+      "saldoInicial": 41.36,
+      "bank": "nubank",
+      "status": "active"
     },
     {
       "id": "acc-1767223419493",
       "nome": "BancoInter",
       "bankType": "inter",
-      "saldo": 0
+      "saldo": 0,
+      "bank": "inter",
+      "saldoInicial": 0,
+      "status": "active"
+    },
+    {
+      "nome": "Mercadupag",
+      "bank": "mercado_pago",
+      "saldoInicial": 0,
+      "saldo": 0,
+      "status": "active",
+      "id": "acc-1774556557035"
     }
   ],
   "credit_cards": [
@@ -330,6 +343,6 @@
   "theme": "light",
   "selectedAccountId": "sfsfsd",
   "dashboard_last_month": "2026-01",
-  "transactions_period_pref": "2026-02",
+  "transactions_period_pref": "2026-03",
   "creditcard_last_month": "2025-08"
 }
