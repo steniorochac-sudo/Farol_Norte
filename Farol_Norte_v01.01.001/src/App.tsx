@@ -185,7 +185,7 @@ function AppContent(): JSX.Element {
           <div className="position-absolute top-0 start-0 w-100 h-100 bg-black bg-opacity-75 backdrop-blur" onClick={closeMenu}></div>
           <div className="position-absolute bottom-0 start-0 w-100 theme-surface radius-top-24 slide-up overflow-hidden" style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
             
-            <div className="p-4 border-bottom border-secondary border-opacity-25 d-flex justify-content-between align-items-center bg-white bg-opacity-5">
+            <div className="p-4 border-bottom border-secondary theme-surface border-opacity-25 d-flex justify-content-between align-items-center bg-white bg-opacity-5">
               <div className="d-flex align-items-center gap-3">
                 <i className="bi bi-compass-fill fs-1 text-warning drop-shadow-warning"></i>
                 <div>

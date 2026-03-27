@@ -41,8 +41,15 @@ export default function Accounts() {
     const chartInstance = useRef<Chart | null>(null);
 
     // ==========================================
-    // ESTADOS DOS MODAIS
+    // ESTADOS: Modais e Lista de Cartões
     // ==========================================
+    const [cartoes, setCartoes] = useState<CreditCard[]>([]);
+    
+    // Sincroniza os cartões na montagem e após atualizações
+    useEffect(() => {
+        setCartoes(cardsDb.getAll());
+    }, [transactions, accounts]); // Refaz a leitura se houver refreshData()
+
     const [modalConta, setModalConta] = useState<ModalContaState>({ 
         show: false, isEditing: false, id: null, nome: '', saldoInicial: '', bankType: 'generic' 
     });
@@ -171,7 +178,7 @@ export default function Accounts() {
     }, [transactions]);
 
     // ==========================================
-    // FUNÇÕES DE SALVAMENTO
+    // FUNÇÕES DE SALVAMENTO E EXCLUSÃO
     // ==========================================
     const salvarConta = () => {
         if (!modalConta.nome) return alert("Digite o nome da conta.");
@@ -221,6 +228,8 @@ export default function Accounts() {
             payload.id = `card-${Date.now()}`;
             cardsDb.add(payload);
         }
+        
+        setCartoes(cardsDb.getAll()); // Força a atualização local da lista
         refreshData();
         setModalCartao({ ...modalCartao, show: false });
     };
@@ -228,11 +237,10 @@ export default function Accounts() {
     const excluirCartao = (id: string) => {
         if(window.confirm("Remover este cartão?")){
             cardsDb.delete(id);
+            setCartoes(cardsDb.getAll()); // Força a atualização local da lista
             refreshData();
         }
     };
-
-    const cartoes = cardsDb.getAll();
 
     // ==========================================
     // OPÇÕES PARA OS SELECTS CUSTOMIZADOS
@@ -311,8 +319,9 @@ export default function Accounts() {
                                     accounts.map((c: Account) => {
                                         const cBank = c.bank;
                                         const cName = c.nome;
-                                        const cIni = (c as any).saldoInicial;
-                                        const cSal = (c as any).saldo;
+                                        // Tipagem corrigida para evitar undefined
+                                        const cIni = (c as any).saldoInicial ?? 0;
+                                        const cSal = (c as any).saldo ?? 0;
 
                                         return (
                                             <div key={c.id} className="list-group-item bg-transparent text-light border-bottom border-secondary border-opacity-25 px-4 py-3 d-flex justify-content-between align-items-center hover-opacity">
@@ -331,7 +340,7 @@ export default function Accounts() {
                                                     </div>
                                                 </div>
                                                 <div className="btn-group">
-                                                    <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalConta({show: true, isEditing: true, id: c.id, nome: cName, bankType: cBank || 'generic', saldoInicial: cIni ?? cSal})}><i className="bi bi-pencil"></i></button>
+                                                    <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalConta({show: true, isEditing: true, id: c.id, nome: cName, bankType: cBank || 'generic', saldoInicial: cIni})}><i className="bi bi-pencil"></i></button>
                                                     <button className="btn btn-sm btn-outline-danger border-0" onClick={() => excluirConta(c.id)}><i className="bi bi-trash"></i></button>
                                                 </div>
                                             </div>
@@ -354,7 +363,8 @@ export default function Accounts() {
                         </div>
                         <div className="card-body p-0">
                             <div className="list-group list-group-flush bg-transparent">
-                                {cartoes.length === 0 ? <div className="p-4 text-center text-muted">Nenhuma cartão.</div> :
+                                {/* Usa o estado local 'cartoes' para reagir às mudanças imediatamente */}
+                                {cartoes.length === 0 ? <div className="p-4 text-center text-muted">Nenhum cartão.</div> :
                                     cartoes.map((c: CreditCard) => {
                                         const cAccountId = c.account_id;
                                         const cName = c.nome;
@@ -373,7 +383,7 @@ export default function Accounts() {
                                                     </span>
                                                 </div>
                                                 <div className="btn-group">
-                                                    <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalCartao({ show: true, isEditing: true, id: c.id, nome: cName, closingDay: cClosing, dueDay: c.dueDay, account_id: cAccountId })}><i className="bi bi-pencil"></i></button>
+                                                    <button className="btn btn-sm btn-outline-light border-0 text-white-50" onClick={() => setModalCartao({ show: true, isEditing: true, id: c.id, nome: cName || '', closingDay: cClosing ?? 5, dueDay: c.dueDay ?? 12, account_id: cAccountId || '' })}><i className="bi bi-pencil"></i></button>
                                                     <button className="btn btn-sm btn-outline-danger border-0" onClick={() => excluirCartao(c.id)}><i className="bi bi-trash"></i></button>
                                                 </div>
                                             </div>

@@ -5,7 +5,8 @@ import { useFinance } from '../context/FinanceContext';
 import { db, cardsDb, rulesDb } from '../services/DataService';
 import { BankStrategyFactory, BANK_STRATEGIES } from '../services/BankStrategies';
 import { OfxParser } from '../services/parsers/OfxParser'; 
-import { ImportTransactionService } from '../services/ImportTransactionService'; // O NOVO CÉREBRO
+import { ImportTransactionService } from '../services/ImportTransactionService'; 
+import CustomSelect, { SelectOption } from './CustomSelect';
 
 interface ImportModalProps {
     show: boolean;
@@ -127,6 +128,11 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
         }
     };
 
+    const accountOptions: SelectOption[] = [
+        { value: '', label: '-- Escolha a conta --', disabled: true },
+        ...accounts.map((acc: any) => ({ value: acc.id, label: acc.nome }))
+    ];
+
     if (!show) return null;
 
     return (
@@ -148,12 +154,18 @@ export default function ImportModal({ show, onClose }: ImportModalProps) {
 
                         <div className="mb-4 fade-in">
                             <label className="form-label fw-bold text-muted small text-uppercase">1. Selecione a Conta</label>
-                            <select className="form-select form-select-lg bg-transparent text-light border-secondary" value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} disabled={isLoading}>
-                                <option value="" disabled className="text-dark">-- Escolha a conta --</option>
-                                {accounts.map((acc: any) => (
-                                    <option key={acc.id} value={acc.id} className="text-dark">{acc.nome}</option>
-                                ))}
-                            </select>
+                            {/* A div ao redor usa pointerEvents para simular o 'disabled' caso o componente customizado não tenha essa prop */}
+                            <div 
+                                className={`position-relative ${isLoading ? 'opacity-50' : ''}`} 
+                                style={{ zIndex: 105, pointerEvents: isLoading ? 'none' : 'auto' }}
+                            >
+                                <CustomSelect 
+                                    options={accountOptions} 
+                                    value={selectedAccountId} 
+                                    onChange={(val) => setSelectedAccountId(val)} 
+                                    textColor="text-light" 
+                                />
+                            </div>
                         </div>
 
                         {selectedAccountId && (
