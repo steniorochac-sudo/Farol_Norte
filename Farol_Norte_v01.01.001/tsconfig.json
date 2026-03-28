@@ -16,7 +16,6 @@
     "jsx": "react-jsx",
     "allowSyntheticDefaultImports": true,
     
-    /* 🔥 A LINHA MÁGICA QUE RESOLVE O SEU ERRO 🔥 */
     "types": ["react", "react-dom", "vite/client"],
 
     /* Linting */
@@ -24,6 +23,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    "ignoreDeprecations": "6.0",
     
     /* Path Aliases (Opcional, mas útil) */
     "baseUrl": ".",
