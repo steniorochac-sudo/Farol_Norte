@@ -23,7 +23,19 @@ export default function Transactions() {
     const [showImportModal, setShowImportModal] = useState(false);
 
     const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('transactions_search_pref') || '');
-    const [selectedMonth, setSelectedMonth] = useState(() => localStorage.getItem('transactions_period_pref') || new Date().toISOString().slice(0, 7));
+    const [dateRange, setDateRange] = useState(() => {
+        const saved = localStorage.getItem('transactions_daterange_pref');
+        if (saved) return JSON.parse(saved);
+
+        // Padrão: Primeiro ao último dia do mês atual
+        const hoje = new Date();
+        const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+        const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+        return { start: primeiroDia, end: ultimoDia };
+    });
+
+    // Estado para controlar se estamos usando Mês Fechado (rápido) ou Período Customizado
+    const [isCustomRange, setIsCustomRange] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(() => localStorage.getItem('transactions_category_pref') || 'all');
     const [selectedType, setSelectedType] = useState(() => localStorage.getItem('transactions_type_pref') || 'all');
 
@@ -46,12 +58,12 @@ export default function Transactions() {
 
     useEffect(() => {
         localStorage.setItem('transactions_search_pref', searchTerm);
-        localStorage.setItem('transactions_period_pref', selectedMonth);
+        localStorage.setItem('transactions_daterange_pref', JSON.stringify(dateRange));
         localStorage.setItem('transactions_category_pref', selectedCategory);
         localStorage.setItem('transactions_type_pref', selectedType);
         setCurrentPage(1);
         setSelectedIds(new Set());
-    }, [searchTerm, selectedMonth, selectedCategory, selectedType]);
+    }, [searchTerm, dateRange, selectedCategory, selectedType]);
 
     // ==========================================
     // 2. MOTOR DE FILTRAGEM
@@ -71,17 +83,32 @@ export default function Transactions() {
 
     const filteredTransactions = useMemo(() => {
         return baseTransactions.filter((t: any) => {
+            // 1. Filtro de Conta e Tipo
             if (currentAccountId !== 'all' && t.account_id !== currentAccountId) return false;
             if (selectedType !== 'all' && t.tipoLancamento !== selectedType) return false;
 
-            if (selectedMonth !== 'all') {
-                const parts = t.data?.split('/');
-                if (parts?.length === 3) {
-                    const tMonth = `${parts[2]}-${parts[1]}`;
-                    if (tMonth !== selectedMonth) return false;
+            // 2. Filtro de Período (Start / End Date)
+            const tDateStr = t.dataVencimento && t.dataVencimento !== 'undefined' ? t.dataVencimento : t.data;
+            const tDateObj = parseDateBR(tDateStr);
+
+            if (tDateObj) {
+                // Zera as horas para comparar apenas os dias
+                tDateObj.setHours(0, 0, 0, 0);
+
+                if (dateRange.start) {
+                    const [sy, sm, sd] = dateRange.start.split('-');
+                    const startDateObj = new Date(parseInt(sy), parseInt(sm) - 1, parseInt(sd));
+                    if (tDateObj < startDateObj) return false;
+                }
+
+                if (dateRange.end) {
+                    const [ey, em, ed] = dateRange.end.split('-');
+                    const endDateObj = new Date(parseInt(ey), parseInt(em) - 1, parseInt(ed));
+                    if (tDateObj > endDateObj) return false;
                 }
             }
 
+            // 3. Filtro de Categoria
             if (selectedCategory === 'NULL_CAT') {
                 if (t.categoria && t.categoria !== 'Não classificada') return false;
             } else if (selectedCategory !== 'all') {
@@ -93,15 +120,29 @@ export default function Transactions() {
                 if (!match) return false;
             }
 
+            // 4. Busca Híbrida Inteligente (Texto + Valores Numéricos)
             if (searchTerm) {
-                const term = searchTerm.toLowerCase();
-                const matchNome = (t.nome || '').toLowerCase().includes(term);
-                const matchCat = (t.categoria || '').toLowerCase().includes(term);
+                const termLower = searchTerm.toLowerCase();
+
+                // Extração Textual
+                const matchNome = (t.nome || '').toLowerCase().includes(termLower);
+                const matchCat = (t.categoria || '').toLowerCase().includes(termLower);
                 let matchSplit = false;
                 if (t.split) {
-                    matchSplit = t.split.some((part: any) => part.categoria.toLowerCase().includes(term));
+                    matchSplit = t.split.some((part: any) => part.categoria.toLowerCase().includes(termLower));
                 }
-                if (!matchNome && !matchCat && !matchSplit) return false;
+
+                // Extração Numérica (Busca se o termo digitado for parecido com o valor)
+                let matchValor = false;
+                // Converte "42,79" para "42.79" e tenta ler como float
+                const numTerm = parseFloat(termLower.replace(',', '.'));
+                if (!isNaN(numTerm)) {
+                    // Verifica se o valor da transação é parecido (margem de 1 centavo para evitar quebras de float)
+                    const absValor = Math.abs(t.valor);
+                    if (Math.abs(absValor - numTerm) < 0.02) matchValor = true;
+                }
+
+                if (!matchNome && !matchCat && !matchSplit && !matchValor) return false;
             }
 
             return true;
@@ -113,15 +154,36 @@ export default function Transactions() {
             if (!dateB) return -1;
             return dateB.getTime() - dateA.getTime();
         });
-    }, [baseTransactions, currentAccountId, selectedMonth, selectedCategory, selectedType, searchTerm]);
+    }, [baseTransactions, currentAccountId, dateRange, selectedCategory, selectedType, searchTerm]);
 
-    const navegarMes = (dir: number) => {
-        if (selectedMonth === 'all') return;
-        const idx = availableMonths.indexOf(selectedMonth) + dir;
-        if (idx >= 0 && idx < availableMonths.length) {
-            setSelectedMonth(availableMonths[idx]);
-        }
+    const pularMes = (direcao: number) => {
+        // Pega a data inicial atual e adiciona/subtrai o mês
+        const [sy, sm, sd] = dateRange.start.split('-');
+        let dataAlvo = new Date(parseInt(sy), parseInt(sm) - 1 + direcao, 1);
+
+        const primeiroDia = new Date(dataAlvo.getFullYear(), dataAlvo.getMonth(), 1).toISOString().split('T')[0];
+        const ultimoDia = new Date(dataAlvo.getFullYear(), dataAlvo.getMonth() + 1, 0).toISOString().split('T')[0];
+
+        setDateRange({ start: primeiroDia, end: ultimoDia });
+        setIsCustomRange(false); // Reseta a UI para modo "Mês Fechado"
     };
+
+    // Label do Mês para exibição na UI
+    const getMonthLabel = () => {
+        if (isCustomRange) return "Período Personalizado";
+        const [y, m] = dateRange.start.split('-');
+        const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
+        const nomeMes = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
+        return nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
+    };
+
+    // const navegarMes = (dir: number) => {
+    //     if (selectedMonth === 'all') return;
+    //     const idx = availableMonths.indexOf(selectedMonth) + dir;
+    //     if (idx >= 0 && idx < availableMonths.length) {
+    //         setSelectedMonth(availableMonths[idx]);
+    //     }
+    // };
 
     const summary = useMemo(() => {
         return filteredTransactions.reduce((acc, t: any) => {
@@ -199,16 +261,16 @@ export default function Transactions() {
         ...accounts.map((acc: any) => ({ value: acc.id, label: acc.nome }))
     ];
 
-    const monthOptions = [
-        { value: 'all', label: '📅 Histórico Todo' },
-        { value: 'disabled', label: '---', disabled: true },
-        ...availableMonths.map((mesAno: any) => {
-            const [ano, mes] = mesAno.split('-');
-            const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
-            const nomeMes = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
-            return { value: mesAno, label: nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1) };
-        })
-    ];
+    // const monthOptions = [
+    //     { value: 'all', label: '📅 Histórico Todo' },
+    //     { value: 'disabled', label: '---', disabled: true },
+    //     ...availableMonths.map((mesAno: any) => {
+    //         const [ano, mes] = mesAno.split('-');
+    //         const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
+    //         const nomeMes = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
+    //         return { value: mesAno, label: nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1) };
+    //     })
+    // ];
 
     const categoryOptions = [
         { value: 'all', label: '🏷️ Todas Categorias' },
@@ -254,7 +316,10 @@ export default function Transactions() {
                         <i className="bi bi-cloud-upload me-2"></i>Importar Dados
                     </button>
                     <button className="btn btn-outline-danger fw-bold ms-auto border-0" onClick={() => {
-                        setSearchTerm(''); setSelectedCategory('all'); setSelectedType('all');
+                        setSearchTerm('');
+                        setSelectedCategory('all');
+                        setSelectedType('all');
+                        pularMes(0); // Reseta para o mês atual
                     }}><i className="bi bi-eraser-fill me-1"></i> Limpar Filtros</button>
                 </div>
 
@@ -263,16 +328,34 @@ export default function Transactions() {
                         <CustomSelect options={accountOptions} value={currentAccountId} onChange={(val) => changeAccount(val)} textColor="text-warning" />
                     </div>
 
+                    {/* NOVO SELETOR DE PERÍODO */}
                     <div className="col-md-3 position-relative" style={{ zIndex: 103 }}>
-                        <div className="input-group flex-nowrap w-100">
-                            <button className="btn btn-outline-secondary text-white-50 border-secondary radius-left-8" onClick={() => navegarMes(1)} disabled={selectedMonth === 'all' || availableMonths.indexOf(selectedMonth) === availableMonths.length - 1}><i className="bi bi-chevron-left"></i></button>
-                            <div className="w-100 position-relative z-150">
-                                <div className="h-100 mx-n1">
-                                    <CustomSelect options={monthOptions} value={selectedMonth} onChange={(val) => setSelectedMonth(val)} className="h-100" textColor="text-light" />
-                                </div>
+                        {!isCustomRange ? (
+                            // MODO RÁPIDO: Navegação por Mês Fechado
+                            <div className="input-group flex-nowrap w-100 h-100">
+                                <button className="btn btn-outline-secondary text-white-50 border-secondary radius-left-8" onClick={() => pularMes(-1)} title="Mês Anterior">
+                                    <i className="bi bi-chevron-left"></i>
+                                </button>
+
+                                <button className="btn theme-surface border border-secondary text-light flex-grow-1 fw-bold" onClick={() => setIsCustomRange(true)} title="Clique para definir período específico">
+                                    {getMonthLabel()}
+                                </button>
+
+                                <button className="btn btn-outline-secondary text-white-50 border-secondary radius-right-8" onClick={() => pularMes(1)} title="Próximo Mês">
+                                    <i className="bi bi-chevron-right"></i>
+                                </button>
                             </div>
-                            <button className="btn btn-outline-secondary text-white-50 border-secondary radius-right-8" onClick={() => navegarMes(-1)} disabled={selectedMonth === 'all' || availableMonths.indexOf(selectedMonth) <= 0}><i className="bi bi-chevron-right"></i></button>
-                        </div>
+                        ) : (
+                            // MODO CUSTOMIZADO: Data Início e Fim
+                            <div className="input-group flex-nowrap w-100 h-100">
+                                <input type="date" className="form-control text-light text-micro border-secondary radius-left-8 bg-transparent" title="Data Inicial" value={dateRange.start} onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })} />
+                                <span className="input-group-text bg-transparent border-secondary text-white-50 p-1">até</span>
+                                <input type="date" className="form-control text-light text-micro border-secondary bg-transparent" title="Data Final" value={dateRange.end} onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })} />
+                                <button className="btn btn-outline-danger border-secondary radius-right-8" onClick={() => pularMes(0)} title="Voltar ao Mês Atual">
+                                    <i className="bi bi-x"></i>
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="col-md-3 position-relative" style={{ zIndex: 102 }}>
@@ -337,7 +420,7 @@ export default function Transactions() {
 
                             let vencStatusClass = "text-muted opacity-75";
                             let vencIcon = "bi-calendar-event opacity-75";
-                            
+
                             // === NOVO MOTOR DE RENDERIZAÇÃO DE DATAS ===
                             let finalVencimento = t.dataVencimento;
                             const isVencimentoValido = finalVencimento && finalVencimento !== 'undefined' && finalVencimento !== 'NaN' && finalVencimento !== 'null';
@@ -543,7 +626,7 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, loca
         const [d, m, y] = transaction.data.split('/');
         return `${y}-${m}-${d}`;
     });
-    
+
     // 2. Vencimento
     const [dataVencIso, setDataVencIso] = useState(() => {
         const rawVenc = transaction?.dataVencimento && transaction.dataVencimento !== 'undefined' ? transaction.dataVencimento : transaction?.data;
@@ -603,7 +686,7 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, loca
 
         const [y, m, d] = dataIso.split('-');
         const dataBR = `${d}/${m}/${y}`;
-        
+
         const [vy, vm, vd] = dataVencIso.split('-');
         const dataVencBR = `${vd}/${vm}/${vy}`;
 
@@ -617,7 +700,7 @@ function TransactionEditModal({ transaction, onClose, accounts, categories, loca
         if (singleCategory === 'Pagamento de Fatura') finalTipo = 'Pagamento de Fatura';
 
         const isCartao = cardsDb.getAll().some((c: any) => c.id === accountId);
-        
+
         // Deriva o status invisivelmente para manter os Dashboards funcionando
         const statusDerivado = dataPagBR ? 'pago' : 'pendente';
 
