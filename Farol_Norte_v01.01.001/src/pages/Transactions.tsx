@@ -157,24 +157,38 @@ export default function Transactions() {
     }, [baseTransactions, currentAccountId, dateRange, selectedCategory, selectedType, searchTerm]);
 
     const pularMes = (direcao: number) => {
-        // Pega a data inicial atual e adiciona/subtrai o mês
-        const [sy, sm, sd] = dateRange.start.split('-');
-        let dataAlvo = new Date(parseInt(sy), parseInt(sm) - 1 + direcao, 1);
+        let anoRef = new Date().getFullYear();
+        let mesRef = new Date().getMonth();
 
+        // Se o usuário estava em "Todo o Histórico" (vazio) e clica na setinha, usamos o mês atual como ponto de partida
+        if (dateRange.start) {
+            const [sy, sm] = dateRange.start.split('-');
+            anoRef = parseInt(sy, 10);
+            mesRef = parseInt(sm, 10) - 1;
+        }
+
+        let dataAlvo = new Date(anoRef, mesRef + direcao, 1);
+        
         const primeiroDia = new Date(dataAlvo.getFullYear(), dataAlvo.getMonth(), 1).toISOString().split('T')[0];
         const ultimoDia = new Date(dataAlvo.getFullYear(), dataAlvo.getMonth() + 1, 0).toISOString().split('T')[0];
-
+        
         setDateRange({ start: primeiroDia, end: ultimoDia });
-        setIsCustomRange(false); // Reseta a UI para modo "Mês Fechado"
+        setIsCustomRange(false); 
     };
 
-    // Label do Mês para exibição na UI
     const getMonthLabel = () => {
+        if (!dateRange.start && !dateRange.end) return "Todo o Histórico";
         if (isCustomRange) return "Período Personalizado";
+        
         const [y, m] = dateRange.start.split('-');
-        const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
+        const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
         const nomeMes = dateObj.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
         return nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
+    };
+
+    const mostrarTodoHistorico = () => {
+        setDateRange({ start: '', end: '' });
+        setIsCustomRange(false);
     };
 
     // const navegarMes = (dir: number) => {
@@ -319,7 +333,7 @@ export default function Transactions() {
                         setSearchTerm('');
                         setSelectedCategory('all');
                         setSelectedType('all');
-                        pularMes(0); // Reseta para o mês atual
+                        //pularMes(0); // Reseta para o mês atual
                     }}><i className="bi bi-eraser-fill me-1"></i> Limpar Filtros</button>
                 </div>
 
@@ -328,31 +342,34 @@ export default function Transactions() {
                         <CustomSelect options={accountOptions} value={currentAccountId} onChange={(val) => changeAccount(val)} textColor="text-warning" />
                     </div>
 
-                    {/* NOVO SELETOR DE PERÍODO */}
+                    {/* NOVO SELETOR DE PERÍODO E HISTÓRICO */}
                     <div className="col-md-3 position-relative" style={{ zIndex: 103 }}>
                         {!isCustomRange ? (
-                            // MODO RÁPIDO: Navegação por Mês Fechado
                             <div className="input-group flex-nowrap w-100 h-100">
                                 <button className="btn btn-outline-secondary text-white-50 border-secondary radius-left-8" onClick={() => pularMes(-1)} title="Mês Anterior">
                                     <i className="bi bi-chevron-left"></i>
                                 </button>
-
-                                <button className="btn theme-surface border border-secondary text-light flex-grow-1 fw-bold" onClick={() => setIsCustomRange(true)} title="Clique para definir período específico">
+                                
+                                <button className="btn theme-surface border border-secondary text-light flex-grow-1 fw-bold text-truncate" onClick={() => setIsCustomRange(true)} title="Definir período específico">
                                     {getMonthLabel()}
                                 </button>
-
+                                
                                 <button className="btn btn-outline-secondary text-white-50 border-secondary radius-right-8" onClick={() => pularMes(1)} title="Próximo Mês">
                                     <i className="bi bi-chevron-right"></i>
                                 </button>
                             </div>
                         ) : (
-                            // MODO CUSTOMIZADO: Data Início e Fim
                             <div className="input-group flex-nowrap w-100 h-100">
-                                <input type="date" className="form-control text-light text-micro border-secondary radius-left-8 bg-transparent" title="Data Inicial" value={dateRange.start} onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })} />
-                                <span className="input-group-text bg-transparent border-secondary text-white-50 p-1">até</span>
-                                <input type="date" className="form-control text-light text-micro border-secondary bg-transparent" title="Data Final" value={dateRange.end} onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })} />
-                                <button className="btn btn-outline-danger border-secondary radius-right-8" onClick={() => pularMes(0)} title="Voltar ao Mês Atual">
-                                    <i className="bi bi-x"></i>
+                                <input type="date" className="form-control text-light text-micro border-secondary radius-left-8 bg-transparent px-1" title="Data Inicial" value={dateRange.start} onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })} />
+                                <input type="date" className="form-control text-light text-micro border-secondary bg-transparent px-1" title="Data Final" value={dateRange.end} onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })} />
+                                
+                                {/* Botão Mágico: Zera as datas e exibe todo o histórico */}
+                                <button className="btn btn-outline-info border-secondary text-micro px-2 fw-bold" onClick={mostrarTodoHistorico} title="Ver Todo o Histórico">
+                                    Tudo
+                                </button>
+                                
+                                <button className="btn btn-outline-danger border-secondary radius-right-8 px-2" onClick={() => pularMes(0)} title="Voltar ao Mês Atual">
+                                    <i className="bi bi-x fs-5"></i>
                                 </button>
                             </div>
                         )}
