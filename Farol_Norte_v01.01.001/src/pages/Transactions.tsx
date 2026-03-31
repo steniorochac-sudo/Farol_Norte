@@ -88,7 +88,7 @@ export default function Transactions() {
             if (selectedType !== 'all' && t.tipoLancamento !== selectedType) return false;
 
             // 2. Filtro de Período (Start / End Date)
-            const tDateStr = t.dataVencimento && t.dataVencimento !== 'undefined' ? t.dataVencimento : t.data;
+            const tDateStr = t.data;
             const tDateObj = parseDateBR(tDateStr);
 
             if (tDateObj) {

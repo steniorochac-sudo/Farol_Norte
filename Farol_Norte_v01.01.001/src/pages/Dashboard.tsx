@@ -239,7 +239,7 @@ export default function Dashboard() {
     };
 
     // ==========================================
-    // GRÁFICO 3: TENDÊNCIA E FORECASTING
+    // GRÁFICO 3: TENDÊNCIA E FORECASTING (SIMPLIFICADO)
     // ==========================================
     useEffect(() => {
         if (!chartTendenciaRef.current || trendData.length === 0) return;
@@ -247,41 +247,54 @@ export default function Dashboard() {
 
         const labels = trendData.map(p => p.label);
         const saldos = trendData.map(p => p.saldoFinal);
-        const despesas = trendData.map(p => p.despesasAgendadas);
+
+        // Inteligência Visual: Muda a cor do gráfico inteiro se houver previsão de saldo negativo
+        const isRiscoNegativo = saldos.some(s => s < 0);
+        const lineColor = isRiscoNegativo ? '#dc3545' : '#1FA67A'; // Vermelho (Perigo) ou Verde (Saudável)
+        const bgColor = isRiscoNegativo ? 'rgba(220, 53, 69, 0.1)' : 'rgba(31, 166, 122, 0.1)';
 
         chartInstances.current.trend = new Chart(chartTendenciaRef.current, {
-            type: 'bar',
+            type: 'line',
             data: {
                 labels,
                 datasets: [
                     {
-                        type: 'line',
-                        label: 'Saldo Projetado (R$)',
+                        label: 'Saldo Estimado',
                         data: saldos,
-                        borderColor: '#F2B705',
-                        backgroundColor: 'rgba(242, 183, 5, 0.2)',
-                        borderWidth: 2,
-                        tension: 0.3,
+                        borderColor: lineColor,
+                        backgroundColor: bgColor,
+                        borderWidth: 3,
+                        tension: 0.4, // Suaviza a linha (Efeito Onda)
                         fill: true,
-                        yAxisID: 'y'
-                    },
-                    {
-                        type: 'bar',
-                        label: 'Despesas/Faturas Agendadas',
-                        data: despesas,
-                        backgroundColor: 'rgba(220, 53, 69, 0.5)',
-                        borderRadius: 4,
-                        yAxisID: 'y1'
+                        pointRadius: 4,
+                        pointBackgroundColor: lineColor,
+                        pointBorderColor: '#fff',
+                        pointHoverRadius: 6
                     }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false }, // Oculta a legenda (redundante em gráfico de linha única)
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        padding: 12,
+                        callbacks: {
+                            label: (ctx: any) => ` Saldo Previsto: ${formatCurrency(ctx.raw as number)}`
+                        }
+                    }
+                },
                 scales: {
-                    x: { grid: { display: false } },
-                    y: { type: 'linear', display: true, position: 'left', ticks: { callback: (val) => `R$ ${val}` } },
-                    y1: { type: 'linear', display: false, position: 'right', grid: { drawOnChartArea: false } }
+                    x: { grid: { display: false }, ticks: { color: '#9BA8B4', font: { weight: 'bold' } } },
+                    y: { 
+                        type: 'linear', 
+                        display: true, 
+                        border: { display: false },
+                        grid: { color: 'rgba(232, 237, 242, 0.05)' }, 
+                        ticks: { color: '#9BA8B4', callback: (val) => `R$ ${val}` } 
+                    }
                 }
             }
         });
