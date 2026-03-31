@@ -3,9 +3,9 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import { useFinance } from '../context/FinanceContext';
 import { formatCurrency } from '../utils/formatters';
-import { parseDateBR } from '../utils/helpers';
 import CustomSelect, { SelectOption } from '../components/CustomSelect';
-import type { Account } from '../types/index';
+import { DashboardService } from '../services/DashboardService';
+import type { Account, Transaction } from '../types/index';
 
 // =========================================================
 // INTERFACES LOCAIS (Para Drilldowns e Gráficos)
@@ -35,7 +35,7 @@ interface ChartInstances {
     cat?: Chart | null;
     evol?: Chart | null;
     catEvol?: Chart | null;
-    trend?: Chart | null; // NOVO: Gráfico de Tendência
+    trend?: Chart | null; 
 }
 
 export default function Dashboard() {
@@ -47,7 +47,7 @@ export default function Dashboard() {
     } = useFinance();
 
     // ==========================================
-    // ESTADOS
+    // ESTADOS DE UI E FILTROS
     // ==========================================
     const [selectedMonth, setSelectedMonth] = useState<string>(() => localStorage.getItem("dashboard_last_month") || new Date().toISOString().slice(0, 7));
     const [isCategoryHistoryMode, setIsCategoryHistoryMode] = useState<boolean>(false);
@@ -76,17 +76,7 @@ export default function Dashboard() {
     const chartInstances = useRef<ChartInstances>({});
 
     // ==========================================
-    // TRAVA GLOBAL: DETECÇÃO ROBUSTA DE FATURA
-    // ==========================================
-    const isPagamentoFatura = (t: any) => {
-        const descLower = (t.nome || '').toLowerCase();
-        const isFaturaByDesc = (t.tipoLancamento === 'conta' || !t.tipoLancamento) && t.valor < 0 && 
-            (descLower.includes('pagamento fatura') || descLower.includes('pgto fatura') || descLower.includes('pagamento de fatura'));
-        return t.tipo === 'Pagamento de Fatura' || t.categoria === 'Pagamento de Fatura' || !!t.ignorarNoFluxo || isFaturaByDesc;
-    };
-
-    // ==========================================
-    // CÁLCULOS BASE E KPIS
+    // CONSUMO DO SERVICE (O Cérebro Matemático)
     // ==========================================
     const availableMonths = useMemo(() => {
         const meses = new Set<string>();
@@ -100,109 +90,18 @@ export default function Dashboard() {
 
     const currentMonthData = useMemo(() => {
         const [ano, mes] = selectedMonth.split("-");
-
         return transactions.filter((t: any) => {
             if (currentAccountId !== "all" && t.account_id !== currentAccountId) return false;
-            if (isPagamentoFatura(t)) return false; // Sincronizado com Transactions.tsx
-
+            if (DashboardService.isPagamentoFatura(t)) return false; 
             const parts = t.data?.split("/");
             return parts?.[2] === ano && parts?.[1] === mes;
         });
     }, [transactions, selectedMonth, currentAccountId]);
 
+    // O Cálculo de KPIs e Projeção (100 linhas viraram 1 chamada)
     const { kpi, trendData } = useMemo(() => {
-        let receitasMes = 0, despesasMes = 0;
-        let totalReceitasHistorico = 0;
-        let mesesComReceita = new Set();
-        let saldoAtual = 0, dividasFuturas = 0, atrasadas = 0;
-
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-
-        // === LINHA DE CORTE DINÂMICA (Time Travel) ===
-        const [selAno, selMes] = selectedMonth.split('-');
-        let dataLimiteAtraso = new Date(parseInt(selAno), parseInt(selMes), 0); // Último dia do mês selecionado
-        dataLimiteAtraso.setHours(23, 59, 59, 999);
-
-        // Se estiver no mês corrente, a régua de atraso volta a ser HOJE
-        if (selAno === String(hoje.getFullYear()) && selMes === String(hoje.getMonth() + 1).padStart(2, '0')) {
-            dataLimiteAtraso = new Date(hoje);
-            dataLimiteAtraso.setHours(0, 0, 0, 0); 
-        }
-        // ==============================================
-
-        // Estrutura temporal para a projeção (Próximos 6 meses)
-        const projection = Array.from({ length: 6 }, (_, i) => {
-            const d = new Date(hoje.getFullYear(), hoje.getMonth() + i + 1, 1);
-            return {
-                iso: d.toISOString().slice(0, 7),
-                label: d.toLocaleString('pt-BR', { month: 'short' }).toUpperCase(),
-                despesasAgendadas: 0,
-                saldoFinal: 0
-            };
-        });
-
-        transactions.forEach((t: any) => {
-            if (currentAccountId !== "all" && t.account_id !== currentAccountId) return;
-            if (isPagamentoFatura(t)) return;
-
-            const isReceita = t.valor > 0;
-            const absVal = Math.abs(t.valor);
-            const tDate = parseDateBR(t.data);
-            const vencDate = parseDateBR(t.dataVencimento || t.data);
-            const tMesIso = t.data?.split('/').slice(1).reverse().join('-');
-
-            // 1. Saldo Atual (Fluxo de Caixa Realizado)
-            if (t.tipoLancamento !== 'cartao' && t.status === 'pago' && tDate && tDate <= hoje) {
-                saldoAtual += t.valor;
-            }
-
-            // 2. Média Móvel de Receita (Base para Endividamento Global)
-            if (isReceita && t.status === 'pago') {
-                totalReceitasHistorico += t.valor;
-                if (tMesIso) mesesComReceita.add(tMesIso);
-            }
-
-            // 3. Indicadores do Mês Selecionado (Uso da Renda Local)
-            if (tMesIso === selectedMonth) {
-                if (isReceita) receitasMes += t.valor;
-                else despesasMes += absVal; // Pega TODAS as despesas (pagas ou pendentes) do mês
-            }
-
-            // 4. Mapeamento de Passivo Global e Projeção
-            if (!isReceita && t.status !== 'pago') {
-                dividasFuturas += absVal;
-                
-                // === AVALIAÇÃO DE ATRASO RETROATIVA ===
-                // Verifica se a conta venceu ANTES do fim do mês que está sendo visualizado
-                if (vencDate && vencDate < dataLimiteAtraso) {
-                    atrasadas += absVal;
-                }
-
-                // Aloca a despesa no mês correto do gráfico de tendência
-                const projIdx = projection.findIndex(p => p.iso === tMesIso);
-                if (projIdx > -1) projection[projIdx].despesasAgendadas += absVal;
-            }
-        });
-
-        // Cálculos Finais de KPI
-        const receitaMedia = mesesComReceita.size > 0 ? totalReceitasHistorico / mesesComReceita.size : 0;
-        const usoDaRenda = receitasMes > 0 ? ((despesasMes / receitasMes) * 100).toFixed(1) : (despesasMes > 0 ? "100+" : "0.0");
-        const taxaEndividamento = receitaMedia > 0 ? ((dividasFuturas / receitaMedia) * 100).toFixed(1) : (dividasFuturas > 0 ? "100+" : "0.0");
-        
-        // Geração da Linha de Tendência (Rolling Balance)
-        let saldoProjetado = saldoAtual;
-        projection.forEach(p => {
-            saldoProjetado += receitaMedia; // Assume a receita média como constante projetada
-            saldoProjetado -= p.despesasAgendadas; // Abate as faturas já mapeadas
-            p.saldoFinal = saldoProjetado;
-        });
-
-        return {
-            kpi: { receitas: receitasMes, despesas: despesasMes, saldo: receitasMes - despesasMes, usoDaRenda, taxaEndividamento, atrasadas, dividasFuturas },
-            trendData: projection
-        };
-    }, [currentMonthData, transactions, currentAccountId, selectedMonth]);
+        return DashboardService.buildKPIsAndTrend(transactions as Transaction[], currentAccountId, selectedMonth);
+    }, [transactions, currentAccountId, selectedMonth]);
 
     const handleMonthChange = (novoMes: string) => {
         setSelectedMonth(novoMes);
@@ -224,25 +123,7 @@ export default function Dashboard() {
     useEffect(() => {
         if (!chartCategoriasRef.current || catDrillDown.show) return;
 
-        const catMap: Record<string, number> = {};
-        currentMonthData.forEach((t: any) => {
-            if (t.valor < 0) {
-                const parts = (t.split && t.split.length > 0) ? t.split : [t];
-                parts.forEach((s: any) => {
-                    const c = s.categoria || "Não classificada";
-                    catMap[c] = (catMap[c] || 0) + Math.abs(s.valor || t.valor);
-                });
-            }
-        });
-
-        const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
-        const top10 = sorted.slice(0, 10);
-        const outros = sorted.slice(10).reduce((acc, curr) => acc + curr[1], 0);
-
-        const labels = top10.map(i => i[0]);
-        const values = top10.map(i => i[1]);
-        if (outros > 0) { labels.push("Outros"); values.push(outros); }
-        if (values.length === 0) { labels.push("Sem dados"); values.push(1); }
+        const { labels, values } = DashboardService.getTopCategories(currentMonthData as Transaction[]);
 
         const baseColors = [
             "rgba(31, 166, 122, 0.65)", "rgba(242, 183, 5, 0.65)", "rgba(242, 116, 5, 0.65)", 
@@ -287,25 +168,18 @@ export default function Dashboard() {
     }, [currentMonthData, catDrillDown.show]);
 
     // ==========================================
-    // GRÁFICO 2: EVOLUÇÃO MENSAL (LINHA)
+    // GRÁFICO 2: EVOLUÇÃO MENSAL E HEATMAP
     // ==========================================
+    const flowData = useMemo(() => {
+        return DashboardService.getDailyFlow(currentMonthData as Transaction[], selectedMonth);
+    }, [currentMonthData, selectedMonth]);
+
     useEffect(() => {
         if (!chartEvolucaoRef.current) return;
 
         const [ano, mes] = selectedMonth.split("-");
         const diasNoMes = new Date(parseInt(ano), parseInt(mes), 0).getDate();
         const diasLabels = Array.from({ length: diasNoMes }, (_, i) => i + 1);
-
-        const receitasPorDia = new Array(diasNoMes).fill(0);
-        const despesasPorDia = new Array(diasNoMes).fill(0);
-
-        currentMonthData.forEach((t: any) => {
-            const dia = parseInt(t.data.split('/')[0]) - 1;
-            if (dia >= 0 && dia < diasNoMes) {
-                if (t.valor > 0) receitasPorDia[dia] += t.valor;
-                else despesasPorDia[dia] += Math.abs(t.valor);
-            }
-        });
 
         if (chartInstances.current.evol) chartInstances.current.evol.destroy();
 
@@ -314,8 +188,8 @@ export default function Dashboard() {
             data: {
                 labels: diasLabels,
                 datasets: [
-                    { label: 'Receitas', data: receitasPorDia, borderColor: '#1FA67A', backgroundColor: 'rgba(31, 166, 122, 0.1)', tension: 0.3, fill: true, pointRadius: 2 },
-                    { label: 'Despesas', data: despesasPorDia, borderColor: '#dc3545', backgroundColor: 'rgba(220, 53, 69, 0.1)', tension: 0.3, fill: true, pointRadius: 2 }
+                    { label: 'Receitas', data: flowData.receitasPorDia, borderColor: '#1FA67A', backgroundColor: 'rgba(31, 166, 122, 0.1)', tension: 0.3, fill: true, pointRadius: 2 },
+                    { label: 'Despesas', data: flowData.despesasPorDia, borderColor: '#dc3545', backgroundColor: 'rgba(220, 53, 69, 0.1)', tension: 0.3, fill: true, pointRadius: 2 }
                 ]
             },
             options: {
@@ -327,11 +201,45 @@ export default function Dashboard() {
         });
 
         return () => chartInstances.current.evol?.destroy();
-    }, [currentMonthData, selectedMonth]);
+    }, [flowData, selectedMonth]);
 
+    const renderHeatmapGrid = () => {
+        const [ano, mes] = selectedMonth.split("-").map(Number);
+        const diasNoMes = new Date(ano, mes, 0).getDate();
+        const primeiroDiaSemana = new Date(ano, mes - 1, 1).getDay();
+
+        const cells = [];
+        for (let i = 0; i < primeiroDiaSemana; i++) cells.push(<div key={`empty-${i}`}></div>);
+
+        for (let d = 1; d <= diasNoMes; d++) {
+            const val = flowData.despesasPorDia[d - 1] || 0;
+            if (val > 0) {
+                const ratio = Math.min(val / (flowData.maxDespesa * 0.8), 1);
+                const hue = 120 - ratio * 120;
+                let valDisplay = formatCurrency(val).replace("R$", "").trim();
+                if (val >= 100) valDisplay = valDisplay.split(',')[0];
+
+                cells.push(
+                    <div key={d} onClick={() => abrirDetalhesDia(d)}
+                        className="heatmap-cell shadow-sm hover-opacity cursor-pointer text-white"
+                        style={{ backgroundColor: `hsl(${hue}, 70%, 40%)`, border: `1px solid hsl(${hue}, 70%, 50%)` }}>
+                        <span className="fw-bold text-xxs line-height-1">{d}</span>
+                        <span className="text-micro">{valDisplay}</span>
+                    </div>
+                );
+            } else {
+                cells.push(
+                    <div key={d} className="heatmap-cell heatmap-cell-empty">
+                        <span className="text-muted text-xxs">{d}</span>
+                    </div>
+                );
+            }
+        }
+        return cells;
+    };
 
     // ==========================================
-    // GRÁFICO NOVO: TENDÊNCIA E FORECASTING
+    // GRÁFICO 3: TENDÊNCIA E FORECASTING
     // ==========================================
     useEffect(() => {
         if (!chartTendenciaRef.current || trendData.length === 0) return;
@@ -382,15 +290,26 @@ export default function Dashboard() {
     }, [trendData]);
 
     // ==========================================
-    // GRÁFICO 3: EVOLUÇÃO POR CATEGORIA
+    // GRÁFICO 4: EVOLUÇÃO POR CATEGORIA
     // ==========================================
+    function getUltimos6Meses(mesBaseIso: string): string[] {
+        const arr: string[] = [];
+        let cursor = new Date(mesBaseIso + "-01");
+        cursor.setMonth(cursor.getMonth() - 5);
+        for (let i = 0; i < 6; i++) {
+            arr.push(cursor.toISOString().slice(0, 7));
+            cursor.setMonth(cursor.getMonth() + 1);
+        }
+        return arr;
+    }
+
     const allCategoryNamesInPeriod = useMemo(() => {
         const catSet = new Set<string>();
         if (isCategoryHistoryMode) {
             const mesesParaExibir = getUltimos6Meses(selectedMonth);
             transactions.forEach((t: any) => {
                 if (currentAccountId !== "all" && t.account_id !== currentAccountId) return;
-                if (t.valor >= 0 || isPagamentoFatura(t)) return;
+                if (t.valor >= 0 || DashboardService.isPagamentoFatura(t)) return;
                 const transMes = t.data.split('/').slice(1).reverse().join('-');
                 if (mesesParaExibir.includes(transMes)) {
                     const parts = (t.split && t.split.length > 0) ? t.split : [t];
@@ -443,7 +362,7 @@ export default function Dashboard() {
             const catHistory: Record<string, Record<string, number>> = {};
             transactions.forEach((t: any) => {
                 if (currentAccountId !== "all" && t.account_id !== currentAccountId) return;
-                if (t.valor >= 0 || isPagamentoFatura(t)) return;
+                if (t.valor >= 0 || DashboardService.isPagamentoFatura(t)) return;
                 const transMes = t.data.split('/').slice(1).reverse().join('-');
 
                 if (mesesParaExibir.includes(transMes)) {
@@ -501,19 +420,8 @@ export default function Dashboard() {
     }, [currentMonthData, userSelectedCategories, isCategoryHistoryMode, transactions, selectedMonth, currentAccountId]);
 
     // ==========================================
-    // FUNÇÕES AUXILIARES E DRILL-DOWNS
+    // FUNÇÕES DE AÇÃO UI (Drill-downs e Filtros)
     // ==========================================
-    function getUltimos6Meses(mesBaseIso: string): string[] {
-        const arr: string[] = [];
-        let cursor = new Date(mesBaseIso + "-01");
-        cursor.setMonth(cursor.getMonth() - 5);
-        for (let i = 0; i < 6; i++) {
-            arr.push(cursor.toISOString().slice(0, 7));
-            cursor.setMonth(cursor.getMonth() + 1);
-        }
-        return arr;
-    }
-
     const toggleCategoriaDropdown = (e: React.MouseEvent, cat: string) => {
         e.preventDefault();
         e.stopPropagation(); 
@@ -547,57 +455,12 @@ export default function Dashboard() {
         setDayDrillDown({ show: true, dateStr: dataStr, items: itens });
     };
 
-    const renderHeatmapGrid = () => {
-        const [ano, mes] = selectedMonth.split("-").map(Number);
-        const diasNoMes = new Date(ano, mes, 0).getDate();
-        const primeiroDiaSemana = new Date(ano, mes - 1, 1).getDay();
-
-        const gastosPorDia: Record<number, number> = {};
-        let maxGasto = 0;
-        currentMonthData.forEach((t: any) => {
-            if (t.valor < 0) {
-                const dia = parseInt(t.data.split("/")[0]);
-                gastosPorDia[dia] = (gastosPorDia[dia] || 0) + Math.abs(t.valor);
-                if (gastosPorDia[dia] > maxGasto) maxGasto = gastosPorDia[dia];
-            }
-        });
-
-        const cells = [];
-        for (let i = 0; i < primeiroDiaSemana; i++) cells.push(<div key={`empty-${i}`}></div>);
-
-        for (let d = 1; d <= diasNoMes; d++) {
-            const val = gastosPorDia[d] || 0;
-            if (val > 0) {
-                const ratio = Math.min(val / (maxGasto * 0.8), 1);
-                const hue = 120 - ratio * 120;
-                let valDisplay = formatCurrency(val).replace("R$", "").trim();
-                if (val >= 100) valDisplay = valDisplay.split(',')[0];
-
-                cells.push(
-                    <div key={d} onClick={() => abrirDetalhesDia(d)}
-                        className="heatmap-cell shadow-sm hover-opacity cursor-pointer text-white"
-                        style={{ backgroundColor: `hsl(${hue}, 70%, 40%)`, border: `1px solid hsl(${hue}, 70%, 50%)` }}>
-                        <span className="fw-bold text-xxs line-height-1">{d}</span>
-                        <span className="text-micro">{valDisplay}</span>
-                    </div>
-                );
-            } else {
-                cells.push(
-                    <div key={d} className="heatmap-cell heatmap-cell-empty">
-                        <span className="text-muted text-xxs">{d}</span>
-                    </div>
-                );
-            }
-        }
-        return cells;
-    };
-
     // ==========================================
     // OPÇÕES SELECT
     // ==========================================
     const accountOptions: SelectOption[] = [
-    { value: 'all', label: '🏦 Todas as Contas' },
-    ...accounts.map((acc: Account) => ({ value: acc.id, label: acc.nome }))
+        { value: 'all', label: '🏦 Todas as Contas' },
+        ...accounts.map((acc: Account) => ({ value: acc.id, label: acc.nome }))
     ];
 
     const monthOptions: SelectOption[] = availableMonths.map(mesIso => {
@@ -639,9 +502,8 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* KPI CARDS (Layout Expandido para Novos Indicadores) */}
+            {/* KPI CARDS */}
             <div className="row g-3 mb-4">
-                {/* Linha 1: Fluxo de Caixa */}
                 <div className="col-12 col-md-4">
                     <div className="theme-surface border-start border-4 border-success shadow-sm h-100 py-2 radius-12">
                         <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
@@ -676,7 +538,6 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Linha 2: Endividamento Global e Alertas */}
                 <div className="col-12 col-md-4">
                     <div className={`theme-surface border-start border-4 ${kpi.atrasadas > 0 ? 'border-danger bg-danger bg-opacity-10' : 'border-secondary'} shadow-sm h-100 py-2 radius-12`}>
                         <div className="card-body px-4 py-2 d-flex justify-content-between align-items-center">
